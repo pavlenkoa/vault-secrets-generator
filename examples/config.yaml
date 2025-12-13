@@ -1,0 +1,81 @@
+# VSG Configuration Example
+# This file demonstrates all available configuration options
+
+# Variables available for substitution throughout the config
+# Use {variable_name} syntax to reference these values
+env:
+  env: dev
+  region: eu-west-1
+  project: myapp
+
+# Vault connection settings
+vault:
+  address: https://vault.example.com
+  # namespace: admin  # Vault Enterprise namespace (optional)
+
+  # Authentication method: token, kubernetes, or approle
+  auth:
+    method: kubernetes
+    role: secret-sync
+    # mount_path: kubernetes  # Custom auth mount path (optional)
+
+    # For token auth:
+    # method: token
+    # token: hvs.xxxxx  # Or use VAULT_TOKEN env var
+
+    # For approle auth:
+    # method: approle
+    # role_id: xxxxx
+    # secret_id: xxxxx
+
+# Default password generation policy
+# These defaults apply to all 'generate' values unless overridden
+defaults:
+  generate:
+    length: 32
+    digits: 5
+    symbols: 5
+    symbolCharacters: "-_$@"
+    noUpper: false
+    allowRepeat: true
+
+# Secrets definitions grouped by Vault path
+secrets:
+  # Main application secrets
+  main:
+    path: kv/{env}
+    # version: 2  # KV engine version (auto-detected if not set)
+    data:
+      # From Terraform state - S3 backend
+      mysql/host: s3://terraform-state/{env}/rds/terraform.tfstate#output.endpoint
+      mysql/password: s3://terraform-state/{env}/rds/terraform.tfstate#output.admin_password
+      mysql/port: s3://terraform-state/{env}/rds/terraform.tfstate#output.port
+
+      # From Terraform state - local file
+      # local/value: file:///path/to/terraform.tfstate#output.some_output
+
+      # Generated passwords - use defaults
+      app/api_key: generate
+
+      # Generated with custom policy
+      app/jwt_secret: generate(length=64)
+      app/webhook_token: generate(length=48, symbols=0)
+      app/simple_key: generate(length=24, symbols=0, digits=0)
+
+      # Static values
+      app/environment: "production"
+      app/version: "1.2.3"
+
+  # Docker registry secrets
+  docker:
+    path: kv/{env}-docker
+    data:
+      registry/url: s3://terraform-state/{env}/ecr/terraform.tfstate#output.registry_url
+      registry/username: s3://terraform-state/{env}/ecr/terraform.tfstate#output.username
+
+  # Legacy KV v1 secrets
+  legacy:
+    path: kv/{env}-legacy
+    version: 1
+    data:
+      old/token: generate(length=24, symbols=0)
