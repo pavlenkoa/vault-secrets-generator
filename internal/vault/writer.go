@@ -140,13 +140,35 @@ func (kv *KVClient) Write(ctx context.Context, path string, data map[string]inte
 	return nil
 }
 
-// Delete removes a secret from the KV store.
+// Delete removes a secret from the KV store (soft delete for v2).
 func (kv *KVClient) Delete(ctx context.Context, path string) error {
 	fullPath := kv.buildDeletePath(path)
 
 	_, err := kv.client.Logical().Delete(fullPath)
 	if err != nil {
 		return fmt.Errorf("deleting secret at %s: %w", path, err)
+	}
+
+	return nil
+}
+
+// Destroy permanently removes a secret and all its versions (v2) or deletes (v1).
+// For KV v2, this deletes the metadata which removes all versions permanently.
+func (kv *KVClient) Destroy(ctx context.Context, path string) error {
+	path = strings.TrimPrefix(path, "/")
+
+	var fullPath string
+	if kv.version == KVVersion2 {
+		// For v2, delete metadata to permanently remove all versions
+		fullPath = fmt.Sprintf("%s/metadata/%s", kv.mount, path)
+	} else {
+		// For v1, regular delete is permanent
+		fullPath = fmt.Sprintf("%s/%s", kv.mount, path)
+	}
+
+	_, err := kv.client.Logical().Delete(fullPath)
+	if err != nil {
+		return fmt.Errorf("destroying secret at %s: %w", path, err)
 	}
 
 	return nil

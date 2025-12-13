@@ -13,8 +13,9 @@ import (
 )
 
 var (
-	deleteAll   bool
-	deleteForce bool
+	deleteAll         bool
+	deleteForce       bool
+	deletePermanently bool
 )
 
 var deleteCmd = &cobra.Command{
@@ -25,15 +26,21 @@ var deleteCmd = &cobra.Command{
 If a block name is provided, only that block's secrets are deleted.
 If --all is specified, all blocks defined in the config are deleted.
 
+By default, performs a soft delete (KV v2 keeps version history).
+Use --permanently to remove secrets and all version history.
+
 This is a destructive operation and requires confirmation unless --force is used.`,
-	Example: `  # Delete a specific block's secrets
+	Example: `  # Delete a specific block's secrets (soft delete)
   vsg delete main --config config.yaml
 
+  # Permanently delete (removes all versions)
+  vsg delete main --config config.yaml --permanently
+
   # Delete all secrets defined in config
-  vsg delete --all --config config.yaml
+  vsg delete --all --config config.yaml --permanently
 
   # Delete without confirmation
-  vsg delete main --config config.yaml --force`,
+  vsg delete main --config config.yaml --permanently --force`,
 	RunE: runDelete,
 }
 
@@ -42,6 +49,7 @@ func init() {
 
 	deleteCmd.Flags().BoolVar(&deleteAll, "all", false, "delete all blocks defined in config")
 	deleteCmd.Flags().BoolVarP(&deleteForce, "force", "f", false, "skip confirmation prompt")
+	deleteCmd.Flags().BoolVar(&deletePermanently, "permanently", false, "permanently delete (removes all versions)")
 }
 
 func runDelete(cmd *cobra.Command, args []string) error {
@@ -106,7 +114,11 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 	// Confirm deletion
 	if !deleteForce {
-		fmt.Println("The following secrets will be deleted:")
+		action := "deleted"
+		if deletePermanently {
+			action = "permanently deleted"
+		}
+		fmt.Printf("The following secrets will be %s:\n", action)
 		for i, block := range blocksToDelete {
 			fmt.Printf("  - %s (%s)\n", blockNames[i], block.Path)
 		}
@@ -137,14 +149,27 @@ func runDelete(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		log.Info("deleting secret", "block", blockNames[i], "path", block.Path)
+		action := "deleting"
+		if deletePermanently {
+			action = "permanently deleting"
+		}
+		log.Info(action+" secret", "block", blockNames[i], "path", block.Path)
 
-		if err := kv.Delete(ctx, subpath); err != nil {
+		if deletePermanently {
+			err = kv.Destroy(ctx, subpath)
+		} else {
+			err = kv.Delete(ctx, subpath)
+		}
+		if err != nil {
 			errors = append(errors, fmt.Errorf("%s: %w", blockNames[i], err))
 			continue
 		}
 
-		fmt.Printf("Deleted: %s (%s)\n", blockNames[i], block.Path)
+		result := "Deleted"
+		if deletePermanently {
+			result = "Permanently deleted"
+		}
+		fmt.Printf("%s: %s (%s)\n", result, blockNames[i], block.Path)
 	}
 
 	if len(errors) > 0 {
