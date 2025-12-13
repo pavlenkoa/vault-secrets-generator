@@ -1,0 +1,53 @@
+VSG (Vault Secrets Generator) has been deployed!
+
+CronJob: {{ include "vault-secrets-generator.fullname" . }}
+Schedule: {{ .Values.cronjob.schedule }}
+
+{{- if .Values.config.inline }}
+
+Configuration is managed via ConfigMap: {{ include "vault-secrets-generator.configMapName" . }}
+{{- else if .Values.config.existingConfigMap }}
+
+Using existing ConfigMap: {{ .Values.config.existingConfigMap }}
+{{- else }}
+
+WARNING: No configuration provided!
+Please set config.inline or config.existingConfigMap in your values.
+{{- end }}
+
+{{- if eq .Values.auth.method "kubernetes" }}
+
+Authentication: Kubernetes
+{{- if .Values.auth.kubernetes.role }}
+Role: {{ .Values.auth.kubernetes.role }}
+{{- else }}
+WARNING: No Kubernetes auth role specified!
+Please set auth.kubernetes.role in your values.
+{{- end }}
+{{- else if eq .Values.auth.method "token" }}
+
+Authentication: Token
+{{- if not .Values.auth.token.existingSecret }}
+WARNING: No token secret specified!
+Please set auth.token.existingSecret in your values.
+{{- end }}
+{{- else if eq .Values.auth.method "approle" }}
+
+Authentication: AppRole
+{{- if not .Values.auth.approle.existingSecret }}
+WARNING: No AppRole secret specified!
+Please set auth.approle.existingSecret in your values.
+{{- end }}
+{{- end }}
+
+To manually trigger a job:
+
+  kubectl create job --from=cronjob/{{ include "vault-secrets-generator.fullname" . }} {{ include "vault-secrets-generator.fullname" . }}-manual-$(date +%s)
+
+To view logs:
+
+  kubectl logs -l app.kubernetes.io/name={{ include "vault-secrets-generator.name" . }} --tail=100
+
+To check job history:
+
+  kubectl get jobs -l app.kubernetes.io/name={{ include "vault-secrets-generator.name" . }}

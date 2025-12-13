@@ -1,0 +1,17 @@
+apiVersion: v2
+name: vault-secrets-generator
+description: A Helm chart for VSG - Vault Secrets Generator
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/pavlenkoa/vault-secrets-generator
+sources:
+  - https://github.com/pavlenkoa/vault-secrets-generator
+maintainers:
+  - name: Andrii Pavlenko
+    url: https://github.com/pavlenkoa
+keywords:
+  - vault
+  - secrets
+  - terraform
+  - gitops

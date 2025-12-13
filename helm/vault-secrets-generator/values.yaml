@@ -1,0 +1,150 @@
+# Default values for vault-secrets-generator
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/pavlenkoa/vault-secrets-generator
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account (e.g., for IRSA or Workload Identity)
+  annotations: {}
+  # The name of the service account to use
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# CronJob configuration
+cronjob:
+  # Schedule in Cron format
+  schedule: "*/10 * * * *"
+  # Deadline for starting the job (seconds)
+  startingDeadlineSeconds: 60
+  # How to treat concurrent executions
+  concurrencyPolicy: Forbid
+  # Number of successful jobs to keep
+  successfulJobsHistoryLimit: 3
+  # Number of failed jobs to keep
+  failedJobsHistoryLimit: 3
+  # Suspend the cronjob
+  suspend: false
+
+# VSG configuration
+config:
+  # Inline configuration (will be mounted as ConfigMap)
+  # If empty, you must provide existingConfigMap
+  inline: {}
+  #   env:
+  #     env: prod
+  #     region: us-east-1
+  #   vault:
+  #     address: https://vault.example.com
+  #     auth:
+  #       method: kubernetes
+  #       role: vsg
+  #   secrets:
+  #     main:
+  #       path: kv/myapp
+  #       data:
+  #         db/password: generate(length=32)
+
+  # Use an existing ConfigMap for the configuration
+  existingConfigMap: ""
+  # Key in the ConfigMap containing the config
+  configKey: "config.yaml"
+
+# Vault configuration
+vault:
+  # Vault server address (can also be set in config.inline)
+  address: ""
+  # Vault namespace (optional, for Vault Enterprise)
+  namespace: ""
+
+# Authentication
+auth:
+  # Authentication method: token, kubernetes, approle
+  method: kubernetes
+
+  # Token authentication
+  token:
+    # Use existing secret for token
+    existingSecret: ""
+    secretKey: "token"
+
+  # Kubernetes authentication
+  kubernetes:
+    role: ""
+    # Mount path for kubernetes auth
+    mountPath: "kubernetes"
+
+  # AppRole authentication
+  approle:
+    # Use existing secret for AppRole credentials
+    existingSecret: ""
+    roleIdKey: "role_id"
+    secretIdKey: "secret_id"
+
+# AWS configuration (for S3 state files)
+aws:
+  # AWS region
+  region: ""
+  # Use IRSA (IAM Roles for Service Accounts)
+  # Set serviceAccount.annotations with eks.amazonaws.com/role-arn
+  useIRSA: false
+
+# Additional environment variables
+env: []
+#  - name: AWS_REGION
+#    value: us-east-1
+
+# Additional environment variables from secrets/configmaps
+envFrom: []
+#  - secretRef:
+#      name: my-secret
+
+# Additional CLI arguments
+extraArgs: []
+#  - --verbose
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}

@@ -1,0 +1,11 @@
+{{- if and .Values.config.inline (not .Values.config.existingConfigMap) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vault-secrets-generator.fullname" . }}
+  labels:
+    {{- include "vault-secrets-generator.labels" . | nindent 4 }}
+data:
+  {{ .Values.config.configKey }}: |
+    {{- .Values.config.inline | toYaml | nindent 4 }}
+{{- end }}
