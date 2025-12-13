@@ -14,11 +14,8 @@ import (
 )
 
 var (
-	applyDryRun   bool
-	applyForce    bool
-	applyFailFast bool
-	applyOnly     string
-	applyKey      string
+	applyDryRun bool
+	applyForce  bool
 )
 
 var applyCmd = &cobra.Command{
@@ -38,9 +35,6 @@ Use --dry-run to see what changes would be made without applying them.`,
   # Dry-run to see changes
   vsg apply --config config.yaml --dry-run
 
-  # Apply only a specific block
-  vsg apply --config config.yaml --only main
-
   # Force regeneration of generated secrets
   vsg apply --config config.yaml --force`,
 	RunE: runApply,
@@ -51,19 +45,11 @@ func init() {
 
 	applyCmd.Flags().BoolVar(&applyDryRun, "dry-run", false, "show what would be done without making changes")
 	applyCmd.Flags().BoolVar(&applyForce, "force", false, "force regeneration of generated secrets")
-	applyCmd.Flags().BoolVar(&applyFailFast, "fail-fast", false, "stop on first error")
-	applyCmd.Flags().StringVar(&applyOnly, "only", "", "only process this secret block")
-	applyCmd.Flags().StringVar(&applyKey, "key", "", "only process this key (requires --only)")
 }
 
 func runApply(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 	log := getLogger()
-
-	// Validate flags
-	if applyKey != "" && applyOnly == "" {
-		return fmt.Errorf("--key requires --only to specify the block")
-	}
 
 	// Load config
 	cfgPath, err := getConfigFile()
@@ -101,11 +87,8 @@ func runApply(cmd *cobra.Command, args []string) error {
 
 	// Run reconciliation
 	opts := engine.Options{
-		DryRun:   applyDryRun,
-		Force:    applyForce,
-		FailFast: applyFailFast,
-		Only:     applyOnly,
-		Key:      applyKey,
+		DryRun: applyDryRun,
+		Force:  applyForce,
 	}
 
 	result, err := eng.Reconcile(ctx, cfg, opts)
@@ -131,9 +114,9 @@ func runApply(cmd *cobra.Command, args []string) error {
 
 	// Report result
 	if applyDryRun {
-		adds, updates, deletes, _ := result.Diff.Summary()
-		if adds+updates+deletes > 0 {
-			fmt.Printf("\nDry-run complete. %d changes would be made.\n", adds+updates+deletes)
+		adds, updates, _, _ := result.Diff.Summary()
+		if adds+updates > 0 {
+			fmt.Printf("\nDry-run complete. %d changes would be made.\n", adds+updates)
 		}
 	} else if result.Applied {
 		fmt.Println("\nSecrets applied successfully.")

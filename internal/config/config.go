@@ -8,7 +8,6 @@ import (
 )
 
 // Load reads and parses a config file from the given path.
-// It performs variable substitution and validation.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -19,7 +18,6 @@ func Load(path string) (*Config, error) {
 }
 
 // Parse parses config from YAML bytes.
-// It performs variable substitution and validation.
 func Parse(data []byte) (*Config, error) {
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
@@ -28,11 +26,6 @@ func Parse(data []byte) (*Config, error) {
 
 	// Apply defaults
 	applyDefaults(&cfg)
-
-	// Substitute variables
-	if err := substituteVariables(&cfg); err != nil {
-		return nil, fmt.Errorf("substituting variables: %w", err)
-	}
 
 	// Validate
 	if err := validate(&cfg); err != nil {

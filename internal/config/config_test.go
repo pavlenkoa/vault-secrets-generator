@@ -6,10 +6,6 @@ import (
 
 func TestParse_ValidConfig(t *testing.T) {
 	yaml := `
-env:
-  env: dev
-  region: eu-west-1
-
 vault:
   address: https://vault.example.com
   auth:
@@ -23,10 +19,10 @@ defaults:
 
 secrets:
   main:
-    path: kv/{env}
+    path: secret/dev
     data:
-      app/key: generate
-      app/static: "hello"
+      api_key: generate
+      db_port: "5432"
 `
 
 	cfg, err := Parse([]byte(yaml))
@@ -34,21 +30,155 @@ secrets:
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if cfg.Env["env"] != "dev" {
-		t.Errorf("expected env=dev, got %s", cfg.Env["env"])
-	}
-
 	if cfg.Vault.Address != "https://vault.example.com" {
 		t.Errorf("unexpected vault address: %s", cfg.Vault.Address)
 	}
 
-	// Check variable substitution happened
 	block, ok := cfg.Secrets["main"]
 	if !ok {
 		t.Fatal("missing 'main' secret block")
 	}
-	if block.Path != "kv/dev" {
-		t.Errorf("expected path=kv/dev, got %s", block.Path)
+	if block.Path != "secret/dev" {
+		t.Errorf("expected path=secret/dev, got %s", block.Path)
+	}
+
+	// Check value types
+	if block.Data["api_key"].Type != ValueTypeGenerate {
+		t.Errorf("expected api_key to be generate type, got %s", block.Data["api_key"].Type)
+	}
+	if block.Data["db_port"].Type != ValueTypeStatic {
+		t.Errorf("expected db_port to be static type, got %s", block.Data["db_port"].Type)
+	}
+	if block.Data["db_port"].Static != "5432" {
+		t.Errorf("expected db_port=5432, got %s", block.Data["db_port"].Static)
+	}
+}
+
+func TestParse_GenerateWithCustomPolicy(t *testing.T) {
+	yaml := `
+secrets:
+  test:
+    path: secret/test
+    data:
+      jwt_secret:
+        generate:
+          length: 64
+          symbols: 0
+`
+
+	cfg, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val := cfg.Secrets["test"].Data["jwt_secret"]
+	if val.Type != ValueTypeGenerate {
+		t.Errorf("expected generate type, got %s", val.Type)
+	}
+	if val.Generate == nil {
+		t.Fatal("expected generate policy to be set")
+	}
+	if val.Generate.Length != 64 {
+		t.Errorf("expected length=64, got %d", val.Generate.Length)
+	}
+	if val.Generate.Symbols != 0 {
+		t.Errorf("expected symbols=0, got %d", val.Generate.Symbols)
+	}
+}
+
+func TestParse_SourceWithJSON(t *testing.T) {
+	yaml := `
+secrets:
+  test:
+    path: secret/test
+    data:
+      db_host:
+        source: s3://bucket/terraform.tfstate
+        json: .outputs.db_host.value
+`
+
+	cfg, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val := cfg.Secrets["test"].Data["db_host"]
+	if val.Type != ValueTypeSource {
+		t.Errorf("expected source type, got %s", val.Type)
+	}
+	if val.Source != "s3://bucket/terraform.tfstate" {
+		t.Errorf("unexpected source: %s", val.Source)
+	}
+	if val.JSONPath != ".outputs.db_host.value" {
+		t.Errorf("unexpected json path: %s", val.JSONPath)
+	}
+}
+
+func TestParse_SourceWithYAML(t *testing.T) {
+	yaml := `
+secrets:
+  test:
+    path: secret/test
+    data:
+      config_value:
+        source: file:///path/to/config.yaml
+        yaml: .database.host
+`
+
+	cfg, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val := cfg.Secrets["test"].Data["config_value"]
+	if val.Type != ValueTypeSource {
+		t.Errorf("expected source type, got %s", val.Type)
+	}
+	if val.Source != "file:///path/to/config.yaml" {
+		t.Errorf("unexpected source: %s", val.Source)
+	}
+	if val.YAMLPath != ".database.host" {
+		t.Errorf("unexpected yaml path: %s", val.YAMLPath)
+	}
+}
+
+func TestParse_Command(t *testing.T) {
+	yaml := `
+secrets:
+  test:
+    path: secret/test
+    data:
+      hash:
+        command: caddy hash-password --plaintext "mypassword"
+`
+
+	cfg, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val := cfg.Secrets["test"].Data["hash"]
+	if val.Type != ValueTypeCommand {
+		t.Errorf("expected command type, got %s", val.Type)
+	}
+	if val.Command != `caddy hash-password --plaintext "mypassword"` {
+		t.Errorf("unexpected command: %s", val.Command)
+	}
+}
+
+func TestParse_SourceMissingPath(t *testing.T) {
+	yaml := `
+secrets:
+  test:
+    path: secret/test
+    data:
+      db_host:
+        source: s3://bucket/terraform.tfstate
+`
+
+	_, err := Parse([]byte(yaml))
+	if err == nil {
+		t.Fatal("expected error for source without json/yaml path")
 	}
 }
 
@@ -56,7 +186,7 @@ func TestParse_DefaultValues(t *testing.T) {
 	yaml := `
 secrets:
   test:
-    path: kv/test
+    path: secret/test
     data:
       key: generate
 `
@@ -100,7 +230,7 @@ func TestParse_EmptyPath(t *testing.T) {
 secrets:
   test:
     data:
-      key: value
+      key: "value"
 `
 
 	_, err := Parse([]byte(yaml))
@@ -113,7 +243,7 @@ func TestParse_EmptyData(t *testing.T) {
 	yaml := `
 secrets:
   test:
-    path: kv/test
+    path: secret/test
 `
 
 	_, err := Parse([]byte(yaml))
@@ -126,10 +256,10 @@ func TestParse_InvalidVersion(t *testing.T) {
 	yaml := `
 secrets:
   test:
-    path: kv/test
+    path: secret/test
     version: 3
     data:
-      key: value
+      key: "value"
 `
 
 	_, err := Parse([]byte(yaml))
@@ -149,24 +279,6 @@ not: valid: yaml: here
 	}
 }
 
-func TestParse_UnresolvedVariable(t *testing.T) {
-	yaml := `
-env:
-  env: dev
-
-secrets:
-  test:
-    path: kv/{env}/{undefined}
-    data:
-      key: value
-`
-
-	_, err := Parse([]byte(yaml))
-	if err == nil {
-		t.Fatal("expected error for unresolved variable")
-	}
-}
-
 func TestParse_LengthTooSmall(t *testing.T) {
 	yaml := `
 defaults:
@@ -177,7 +289,7 @@ defaults:
 
 secrets:
   test:
-    path: kv/test
+    path: secret/test
     data:
       key: generate
 `
@@ -185,5 +297,21 @@ secrets:
 	_, err := Parse([]byte(yaml))
 	if err == nil {
 		t.Fatal("expected error for length too small")
+	}
+}
+
+func TestParse_InvalidValueFormat(t *testing.T) {
+	yaml := `
+secrets:
+  test:
+    path: secret/test
+    data:
+      key:
+        unknown_key: "value"
+`
+
+	_, err := Parse([]byte(yaml))
+	if err == nil {
+		t.Fatal("expected error for invalid value format")
 	}
 }

@@ -11,10 +11,10 @@ import (
 type ChangeType string
 
 const (
-	ChangeAdd    ChangeType = "add"
-	ChangeUpdate ChangeType = "update"
-	ChangeDelete ChangeType = "delete"
-	ChangeNone   ChangeType = "none"
+	ChangeAdd       ChangeType = "add"
+	ChangeUpdate    ChangeType = "update"
+	ChangeNone      ChangeType = "none"
+	ChangeUnmanaged ChangeType = "unmanaged" // Key exists in Vault but not in config
 )
 
 // SecretChange represents a change to a single secret key.
@@ -23,7 +23,7 @@ type SecretChange struct {
 	Change    ChangeType  `json:"change"`
 	OldValue  string      `json:"-"` // Never expose in JSON
 	NewValue  string      `json:"-"` // Never expose in JSON
-	Source    ValueSource `json:"source"`
+	Source    ValueSource `json:"source,omitempty"`
 	OldMasked string      `json:"old_value,omitempty"`
 	NewMasked string      `json:"new_value,omitempty"`
 }
@@ -40,11 +40,11 @@ type Diff struct {
 	Blocks []BlockDiff `json:"blocks"`
 }
 
-// HasChanges returns true if there are any changes.
+// HasChanges returns true if there are any changes to apply.
 func (d *Diff) HasChanges() bool {
 	for _, block := range d.Blocks {
 		for _, change := range block.Changes {
-			if change.Change != ChangeNone {
+			if change.Change == ChangeAdd || change.Change == ChangeUpdate {
 				return true
 			}
 		}
@@ -53,7 +53,7 @@ func (d *Diff) HasChanges() bool {
 }
 
 // Summary returns a summary of changes.
-func (d *Diff) Summary() (adds, updates, deletes, unchanged int) {
+func (d *Diff) Summary() (adds, updates, unmanaged, unchanged int) {
 	for _, block := range d.Blocks {
 		for _, change := range block.Changes {
 			switch change.Change {
@@ -61,8 +61,8 @@ func (d *Diff) Summary() (adds, updates, deletes, unchanged int) {
 				adds++
 			case ChangeUpdate:
 				updates++
-			case ChangeDelete:
-				deletes++
+			case ChangeUnmanaged:
+				unmanaged++
 			case ChangeNone:
 				unchanged++
 			}
@@ -111,12 +111,12 @@ func ComputeDiff(current, desired map[string]string, sources map[string]ValueSou
 		}
 	}
 
-	// Check for deleted keys (in current but not in desired)
+	// Check for unmanaged keys (in Vault but not in config)
 	for key, oldValue := range current {
 		if !seen[key] {
 			changes = append(changes, SecretChange{
 				Key:       key,
-				Change:    ChangeDelete,
+				Change:    ChangeUnmanaged,
 				OldValue:  oldValue,
 				OldMasked: maskValue(oldValue),
 			})
@@ -152,17 +152,17 @@ func FormatDiff(diff *Diff) string {
 				sb.WriteString(fmt.Sprintf("  + %s = %s [%s]\n", change.Key, change.NewMasked, change.Source))
 			case ChangeUpdate:
 				sb.WriteString(fmt.Sprintf("  ~ %s: %s -> %s [%s]\n", change.Key, change.OldMasked, change.NewMasked, change.Source))
-			case ChangeDelete:
-				sb.WriteString(fmt.Sprintf("  - %s = %s\n", change.Key, change.OldMasked))
+			case ChangeUnmanaged:
+				sb.WriteString(fmt.Sprintf("  ? %s = %s [unmanaged]\n", change.Key, change.OldMasked))
 			case ChangeNone:
 				// Don't show unchanged in normal output
 			}
 		}
 	}
 
-	adds, updates, deletes, unchanged := diff.Summary()
-	sb.WriteString(fmt.Sprintf("\nSummary: %d to add, %d to update, %d to delete, %d unchanged\n",
-		adds, updates, deletes, unchanged))
+	adds, updates, unmanaged, unchanged := diff.Summary()
+	sb.WriteString(fmt.Sprintf("\nSummary: %d to add, %d to update, %d unmanaged, %d unchanged\n",
+		adds, updates, unmanaged, unchanged))
 
 	return sb.String()
 }
@@ -180,17 +180,17 @@ func FormatDiffVerbose(diff *Diff) string {
 				sb.WriteString(fmt.Sprintf("  + %s = %s [%s]\n", change.Key, change.NewMasked, change.Source))
 			case ChangeUpdate:
 				sb.WriteString(fmt.Sprintf("  ~ %s: %s -> %s [%s]\n", change.Key, change.OldMasked, change.NewMasked, change.Source))
-			case ChangeDelete:
-				sb.WriteString(fmt.Sprintf("  - %s = %s\n", change.Key, change.OldMasked))
+			case ChangeUnmanaged:
+				sb.WriteString(fmt.Sprintf("  ? %s = %s [unmanaged]\n", change.Key, change.OldMasked))
 			case ChangeNone:
 				sb.WriteString(fmt.Sprintf("    %s = %s [%s]\n", change.Key, change.OldMasked, change.Source))
 			}
 		}
 	}
 
-	adds, updates, deletes, unchanged := diff.Summary()
-	sb.WriteString(fmt.Sprintf("\nSummary: %d to add, %d to update, %d to delete, %d unchanged\n",
-		adds, updates, deletes, unchanged))
+	adds, updates, unmanaged, unchanged := diff.Summary()
+	sb.WriteString(fmt.Sprintf("\nSummary: %d to add, %d to update, %d unmanaged, %d unchanged\n",
+		adds, updates, unmanaged, unchanged))
 
 	return sb.String()
 }

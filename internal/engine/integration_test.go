@@ -48,10 +48,22 @@ func TestIntegration_Reconcile(t *testing.T) {
 		Secrets: map[string]config.SecretBlock{
 			"test": {
 				Path: "kv/vsg-integration-test",
-				Data: map[string]string{
-					"static_value":   "hello-world",
-					"generated_pass": "generate(length=16, symbols=0)",
-					"another_static": "test-value-123",
+				Data: map[string]config.Value{
+					"static_value": {
+						Type:   config.ValueTypeStatic,
+						Static: "hello-world",
+					},
+					"generated_pass": {
+						Type: config.ValueTypeGenerate,
+						Generate: &config.PasswordPolicy{
+							Length:  16,
+							Symbols: 0,
+						},
+					},
+					"another_static": {
+						Type:   config.ValueTypeStatic,
+						Static: "test-value-123",
+					},
 				},
 			},
 		},
@@ -67,8 +79,8 @@ func TestIntegration_Reconcile(t *testing.T) {
 		t.Log("No changes detected (secrets may already exist)")
 	}
 
-	adds, updates, deletes, _ := result.Diff.Summary()
-	t.Logf("Plan: %d adds, %d updates, %d deletes", adds, updates, deletes)
+	adds, updates, unmanaged, _ := result.Diff.Summary()
+	t.Logf("Plan: %d adds, %d updates, %d unmanaged", adds, updates, unmanaged)
 
 	// Now apply
 	result, err = engine.Reconcile(ctx, cfg, Options{})
@@ -140,8 +152,13 @@ func TestIntegration_ReconcileWithForce(t *testing.T) {
 		Secrets: map[string]config.SecretBlock{
 			"test": {
 				Path: "kv/vsg-force-test",
-				Data: map[string]string{
-					"password": "generate(length=20)",
+				Data: map[string]config.Value{
+					"password": {
+						Type: config.ValueTypeGenerate,
+						Generate: &config.PasswordPolicy{
+							Length: 20,
+						},
+					},
 				},
 			},
 		},
@@ -188,7 +205,7 @@ func TestIntegration_ReconcileWithForce(t *testing.T) {
 	kv.Delete(ctx, "vsg-force-test")
 }
 
-func TestIntegration_ReconcileOnlyBlock(t *testing.T) {
+func TestIntegration_ReconcileMultipleBlocks(t *testing.T) {
 	vaultClient := skipIfNoVault(t)
 	ctx := context.Background()
 
@@ -199,33 +216,39 @@ func TestIntegration_ReconcileOnlyBlock(t *testing.T) {
 	cfg := &config.Config{
 		Secrets: map[string]config.SecretBlock{
 			"block1": {
-				Path: "kv/vsg-only-test-1",
-				Data: map[string]string{"key": "value1"},
+				Path: "kv/vsg-multi-test-1",
+				Data: map[string]config.Value{
+					"key": {
+						Type:   config.ValueTypeStatic,
+						Static: "value1",
+					},
+				},
 			},
 			"block2": {
-				Path: "kv/vsg-only-test-2",
-				Data: map[string]string{"key": "value2"},
+				Path: "kv/vsg-multi-test-2",
+				Data: map[string]config.Value{
+					"key": {
+						Type:   config.ValueTypeStatic,
+						Static: "value2",
+					},
+				},
 			},
 		},
 	}
 
-	// Only process block1
-	result, err := engine.Reconcile(ctx, cfg, Options{Only: "block1"})
+	// Process all blocks
+	result, err := engine.Reconcile(ctx, cfg, Options{})
 	if err != nil {
 		t.Fatalf("Reconcile failed: %v", err)
 	}
 
-	// Should only have processed block1
-	if len(result.Diff.Blocks) != 1 {
-		t.Errorf("Expected 1 block in diff, got %d", len(result.Diff.Blocks))
-	}
-
-	if result.Diff.Blocks[0].Name != "block1" {
-		t.Errorf("Expected block1, got %s", result.Diff.Blocks[0].Name)
+	// Should have processed both blocks
+	if len(result.Diff.Blocks) != 2 {
+		t.Errorf("Expected 2 blocks in diff, got %d", len(result.Diff.Blocks))
 	}
 
 	// Clean up
 	kv, _ := vault.NewKVClient(vaultClient, "kv", vault.KVVersion2)
-	kv.Delete(ctx, "vsg-only-test-1")
-	kv.Delete(ctx, "vsg-only-test-2")
+	kv.Delete(ctx, "vsg-multi-test-1")
+	kv.Delete(ctx, "vsg-multi-test-2")
 }

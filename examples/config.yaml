@@ -1,13 +1,6 @@
 # VSG Configuration Example
 # This file demonstrates all available configuration options
 
-# Variables available for substitution throughout the config
-# Use {variable_name} syntax to reference these values
-env:
-  env: dev
-  region: eu-west-1
-  project: myapp
-
 # Vault connection settings
 vault:
   address: https://vault.example.com
@@ -41,41 +34,74 @@ defaults:
 
 # Secrets definitions grouped by Vault path
 secrets:
-  # Main application secrets
-  main:
-    path: kv/{env}
-    # version: 2  # KV engine version (auto-detected if not set)
+  # Database secrets
+  database:
+    path: kv/prod/database
     data:
-      # From Terraform state - S3 backend
-      mysql/host: s3://terraform-state/{env}/rds/terraform.tfstate#output.endpoint
-      mysql/password: s3://terraform-state/{env}/rds/terraform.tfstate#output.admin_password
-      mysql/port: s3://terraform-state/{env}/rds/terraform.tfstate#output.port
+      # From Terraform state - S3 backend with JSON extraction
+      host:
+        source: s3://terraform-state/prod/rds/terraform.tfstate
+        json: .outputs.endpoint.value
 
-      # From Terraform state - local file
-      # local/value: file:///path/to/terraform.tfstate#output.some_output
+      port:
+        source: s3://terraform-state/prod/rds/terraform.tfstate
+        json: .outputs.port.value
+
+      username:
+        source: s3://terraform-state/prod/rds/terraform.tfstate
+        json: .outputs.master_username.value
+
+      password: generate
+
+  # Application secrets
+  app:
+    path: kv/prod/app
+    data:
+      # From local file with YAML extraction
+      db_name:
+        source: file:///etc/app/config.yaml
+        yaml: .database.name
 
       # Generated passwords - use defaults
-      app/api_key: generate
+      api_key: generate
 
       # Generated with custom policy
-      app/jwt_secret: generate(length=64)
-      app/webhook_token: generate(length=48, symbols=0)
-      app/simple_key: generate(length=24, symbols=0, digits=0)
+      jwt_secret:
+        generate:
+          length: 64
+
+      webhook_token:
+        generate:
+          length: 48
+          symbols: 0
+
+      # From command execution
+      password_hash:
+        command: caddy hash-password --plaintext "secret123"
 
       # Static values
-      app/environment: "production"
-      app/version: "1.2.3"
+      environment: "production"
+      version: "1.2.3"
 
   # Docker registry secrets
   docker:
-    path: kv/{env}-docker
+    path: kv/prod/docker
     data:
-      registry/url: s3://terraform-state/{env}/ecr/terraform.tfstate#output.registry_url
-      registry/username: s3://terraform-state/{env}/ecr/terraform.tfstate#output.username
+      registry_url:
+        source: s3://terraform-state/prod/ecr/terraform.tfstate
+        json: .outputs.registry_url.value
+
+      registry_token:
+        generate:
+          length: 64
+          symbols: 0
 
   # Legacy KV v1 secrets
   legacy:
-    path: kv/{env}-legacy
+    path: kv/legacy
     version: 1
     data:
-      old/token: generate(length=24, symbols=0)
+      token:
+        generate:
+          length: 24
+          symbols: 0

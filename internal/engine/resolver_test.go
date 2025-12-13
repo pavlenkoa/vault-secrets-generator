@@ -15,7 +15,12 @@ func TestResolver_ResolveStatic(t *testing.T) {
 
 	ctx := context.Background()
 
-	result, err := resolver.Resolve(ctx, "static-value", "", false)
+	val := config.Value{
+		Type:   config.ValueTypeStatic,
+		Static: "static-value",
+	}
+
+	result, err := resolver.Resolve(ctx, val, "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -38,7 +43,11 @@ func TestResolver_ResolveGenerate(t *testing.T) {
 
 	ctx := context.Background()
 
-	result, err := resolver.Resolve(ctx, "generate", "", false)
+	val := config.Value{
+		Type: config.ValueTypeGenerate,
+	}
+
+	result, err := resolver.Resolve(ctx, val, "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -61,7 +70,15 @@ func TestResolver_ResolveGenerateWithParams(t *testing.T) {
 
 	ctx := context.Background()
 
-	result, err := resolver.Resolve(ctx, "generate(length=16, symbols=0)", "", false)
+	val := config.Value{
+		Type: config.ValueTypeGenerate,
+		Generate: &config.PasswordPolicy{
+			Length:  16,
+			Symbols: 0,
+		},
+	}
+
+	result, err := resolver.Resolve(ctx, val, "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -78,8 +95,12 @@ func TestResolver_ResolveGenerateExistingNoForce(t *testing.T) {
 
 	ctx := context.Background()
 
+	val := config.Value{
+		Type: config.ValueTypeGenerate,
+	}
+
 	// With existing value and no force, should keep existing
-	result, err := resolver.Resolve(ctx, "generate", "existing-password", false)
+	result, err := resolver.Resolve(ctx, val, "existing-password", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -99,8 +120,12 @@ func TestResolver_ResolveGenerateExistingWithForce(t *testing.T) {
 
 	ctx := context.Background()
 
+	val := config.Value{
+		Type: config.ValueTypeGenerate,
+	}
+
 	// With force, should generate new value
-	result, err := resolver.Resolve(ctx, "generate", "existing-password", true)
+	result, err := resolver.Resolve(ctx, val, "existing-password", true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -113,7 +138,7 @@ func TestResolver_ResolveGenerateExistingWithForce(t *testing.T) {
 	}
 }
 
-func TestResolver_ResolveTerraformRef(t *testing.T) {
+func TestResolver_ResolveSource(t *testing.T) {
 	registry := fetcher.NewRegistry()
 	defaults := config.DefaultPasswordPolicy()
 	resolver := NewResolver(registry, defaults)
@@ -137,7 +162,13 @@ func TestResolver_ResolveTerraformRef(t *testing.T) {
 
 	ctx := context.Background()
 
-	result, err := resolver.Resolve(ctx, "s3://bucket/state.tfstate#output.endpoint", "", false)
+	val := config.Value{
+		Type:     config.ValueTypeSource,
+		Source:   "s3://bucket/state.tfstate",
+		JSONPath: ".outputs.endpoint.value",
+	}
+
+	result, err := resolver.Resolve(ctx, val, "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -145,12 +176,12 @@ func TestResolver_ResolveTerraformRef(t *testing.T) {
 	if result.Value != "db.example.com" {
 		t.Errorf("expected 'db.example.com', got %q", result.Value)
 	}
-	if result.Source != SourceTerraform {
-		t.Errorf("expected SourceTerraform, got %s", result.Source)
+	if result.Source != SourceRemote {
+		t.Errorf("expected SourceRemote, got %s", result.Source)
 	}
 }
 
-func TestResolver_ResolveTerraformRefCaching(t *testing.T) {
+func TestResolver_ResolveSourceCaching(t *testing.T) {
 	registry := fetcher.NewRegistry()
 	defaults := config.DefaultPasswordPolicy()
 	resolver := NewResolver(registry, defaults)
@@ -175,20 +206,56 @@ func TestResolver_ResolveTerraformRefCaching(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Resolve two values from the same state file
-	_, err := resolver.Resolve(ctx, "s3://bucket/state.tfstate#output.value1", "", false)
+	val1 := config.Value{
+		Type:     config.ValueTypeSource,
+		Source:   "s3://bucket/state.tfstate",
+		JSONPath: ".outputs.value1.value",
+	}
+	val2 := config.Value{
+		Type:     config.ValueTypeSource,
+		Source:   "s3://bucket/state.tfstate",
+		JSONPath: ".outputs.value2.value",
+	}
+
+	// Resolve two values from the same source file
+	_, err := resolver.Resolve(ctx, val1, "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	_, err = resolver.Resolve(ctx, "s3://bucket/state.tfstate#output.value2", "", false)
+	_, err = resolver.Resolve(ctx, val2, "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Should only fetch once due to caching
+	// Should only fetch once due to caching in registry
 	if fetchCount != 1 {
 		t.Errorf("expected 1 fetch (cached), got %d", fetchCount)
+	}
+}
+
+func TestResolver_ResolveCommand(t *testing.T) {
+	registry := fetcher.NewRegistry()
+	defaults := config.DefaultPasswordPolicy()
+	resolver := NewResolver(registry, defaults)
+
+	ctx := context.Background()
+
+	val := config.Value{
+		Type:    config.ValueTypeCommand,
+		Command: "echo hello-world",
+	}
+
+	result, err := resolver.Resolve(ctx, val, "", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.Value != "hello-world" {
+		t.Errorf("expected 'hello-world', got %q", result.Value)
+	}
+	if result.Source != SourceCommand {
+		t.Errorf("expected SourceCommand, got %s", result.Source)
 	}
 }
 

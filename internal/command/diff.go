@@ -11,10 +11,7 @@ import (
 	"github.com/pavlenkoa/vault-secrets-generator/internal/vault"
 )
 
-var (
-	diffOutput string
-	diffOnly   string
-)
+var diffOutput string
 
 var diffCmd = &cobra.Command{
 	Use:   "diff",
@@ -27,10 +24,7 @@ This is equivalent to 'apply --dry-run' but with more output options.`,
   vsg diff --config config.yaml
 
   # Show diff in JSON format
-  vsg diff --config config.yaml --output json
-
-  # Show diff for a specific block
-  vsg diff --config config.yaml --only main`,
+  vsg diff --config config.yaml --output json`,
 	RunE: runDiff,
 }
 
@@ -38,7 +32,6 @@ func init() {
 	rootCmd.AddCommand(diffCmd)
 
 	diffCmd.Flags().StringVarP(&diffOutput, "output", "o", "text", "output format: text, json")
-	diffCmd.Flags().StringVar(&diffOnly, "only", "", "only process this secret block")
 }
 
 func runDiff(cmd *cobra.Command, args []string) error {
@@ -82,7 +75,6 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	// Run plan (dry-run)
 	opts := engine.Options{
 		DryRun: true,
-		Only:   diffOnly,
 	}
 
 	result, err := eng.Plan(ctx, cfg, opts)

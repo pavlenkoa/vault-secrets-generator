@@ -36,7 +36,7 @@ func TestComputeDiff_Update(t *testing.T) {
 		"key1": "new-value",
 	}
 	sources := map[string]ValueSource{
-		"key1": SourceTerraform,
+		"key1": SourceRemote,
 	}
 
 	changes := ComputeDiff(current, desired, sources)
@@ -56,7 +56,7 @@ func TestComputeDiff_Update(t *testing.T) {
 	}
 }
 
-func TestComputeDiff_Delete(t *testing.T) {
+func TestComputeDiff_Unmanaged(t *testing.T) {
 	current := map[string]string{
 		"key1": "value1",
 		"key2": "value2",
@@ -74,21 +74,21 @@ func TestComputeDiff_Delete(t *testing.T) {
 		t.Fatalf("expected 2 changes, got %d", len(changes))
 	}
 
-	var deleteCount, noneCount int
+	var unmanagedCount, noneCount int
 	for _, change := range changes {
 		switch change.Change {
-		case ChangeDelete:
-			deleteCount++
+		case ChangeUnmanaged:
+			unmanagedCount++
 			if change.Key != "key2" {
-				t.Errorf("expected key2 to be deleted, got %s", change.Key)
+				t.Errorf("expected key2 to be unmanaged, got %s", change.Key)
 			}
 		case ChangeNone:
 			noneCount++
 		}
 	}
 
-	if deleteCount != 1 {
-		t.Errorf("expected 1 delete, got %d", deleteCount)
+	if unmanagedCount != 1 {
+		t.Errorf("expected 1 unmanaged, got %d", unmanagedCount)
 	}
 	if noneCount != 1 {
 		t.Errorf("expected 1 unchanged, got %d", noneCount)
@@ -142,13 +142,13 @@ func TestDiff_HasChanges(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "has delete",
+			name: "has unmanaged",
 			diff: &Diff{
 				Blocks: []BlockDiff{
-					{Changes: []SecretChange{{Change: ChangeDelete}}},
+					{Changes: []SecretChange{{Change: ChangeUnmanaged}}},
 				},
 			},
-			expected: true,
+			expected: false, // Unmanaged keys don't count as changes
 		},
 		{
 			name: "no changes",
@@ -184,7 +184,7 @@ func TestDiff_Summary(t *testing.T) {
 					{Change: ChangeAdd},
 					{Change: ChangeAdd},
 					{Change: ChangeUpdate},
-					{Change: ChangeDelete},
+					{Change: ChangeUnmanaged},
 					{Change: ChangeNone},
 					{Change: ChangeNone},
 				},
@@ -192,7 +192,7 @@ func TestDiff_Summary(t *testing.T) {
 		},
 	}
 
-	adds, updates, deletes, unchanged := diff.Summary()
+	adds, updates, unmanaged, unchanged := diff.Summary()
 
 	if adds != 2 {
 		t.Errorf("expected 2 adds, got %d", adds)
@@ -200,8 +200,8 @@ func TestDiff_Summary(t *testing.T) {
 	if updates != 1 {
 		t.Errorf("expected 1 update, got %d", updates)
 	}
-	if deletes != 1 {
-		t.Errorf("expected 1 delete, got %d", deletes)
+	if unmanaged != 1 {
+		t.Errorf("expected 1 unmanaged, got %d", unmanaged)
 	}
 	if unchanged != 2 {
 		t.Errorf("expected 2 unchanged, got %d", unchanged)
@@ -240,7 +240,7 @@ func TestFormatDiff(t *testing.T) {
 				Path: "kv/prod",
 				Changes: []SecretChange{
 					{Key: "db/password", Change: ChangeAdd, NewMasked: "se****23", Source: SourceGenerated},
-					{Key: "db/host", Change: ChangeUpdate, OldMasked: "ol****ue", NewMasked: "ne****ue", Source: SourceTerraform},
+					{Key: "db/host", Change: ChangeUpdate, OldMasked: "ol****ue", NewMasked: "ne****ue", Source: SourceRemote},
 				},
 			},
 		},

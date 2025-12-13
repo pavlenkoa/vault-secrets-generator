@@ -20,11 +20,8 @@ type Engine struct {
 
 // Options configures the engine behavior.
 type Options struct {
-	DryRun   bool
-	Force    bool   // Force regeneration of generated secrets
-	FailFast bool   // Stop on first error
-	Only     string // Only process this block
-	Key      string // Only process this key (requires Only)
+	DryRun bool
+	Force  bool // Force regeneration of generated secrets
 }
 
 // Result contains the outcome of a reconciliation.
@@ -68,23 +65,14 @@ func (e *Engine) Reconcile(ctx context.Context, cfg *config.Config, opts Options
 	}
 
 	for name, block := range cfg.Secrets {
-		// Filter by block name if specified
-		if opts.Only != "" && opts.Only != name {
-			continue
-		}
-
 		blockDiff, errors := e.processBlock(ctx, name, block, opts)
 		result.Diff.Blocks = append(result.Diff.Blocks, blockDiff)
 		result.Errors = append(result.Errors, errors...)
-
-		if opts.FailFast && len(errors) > 0 {
-			return result, fmt.Errorf("failed processing block %s: %w", name, errors[0].Err)
-		}
 	}
 
 	// Apply changes if not dry-run
 	if !opts.DryRun && result.Diff.HasChanges() {
-		applyErrors := e.applyChanges(ctx, cfg, result.Diff, opts)
+		applyErrors := e.applyChanges(ctx, cfg, result.Diff)
 		result.Errors = append(result.Errors, applyErrors...)
 		result.Applied = len(applyErrors) == 0
 	}
@@ -134,19 +122,11 @@ func (e *Engine) processBlock(ctx context.Context, name string, block config.Sec
 	sources := make(map[string]ValueSource)
 
 	for key, value := range block.Data {
-		// Filter by key if specified
-		if opts.Key != "" && opts.Key != key {
-			continue
-		}
-
 		existingValue := currentStrings[key]
 
 		resolved, err := e.resolver.Resolve(ctx, value, existingValue, opts.Force)
 		if err != nil {
 			errors = append(errors, BlockError{Block: name, Key: key, Err: err})
-			if opts.FailFast {
-				break
-			}
 			continue
 		}
 
@@ -164,18 +144,29 @@ func (e *Engine) processBlock(ctx context.Context, name string, block config.Sec
 	// Compute diff
 	blockDiff.Changes = ComputeDiff(currentStrings, desired, sources)
 
+	// Log warnings for unmanaged keys
+	for _, change := range blockDiff.Changes {
+		if change.Change == ChangeUnmanaged {
+			e.logger.Warn("unmanaged key in Vault",
+				"block", name,
+				"key", change.Key,
+				"hint", "this key exists in Vault but not in config",
+			)
+		}
+	}
+
 	return blockDiff, errors
 }
 
 // applyChanges writes the changes to Vault.
-func (e *Engine) applyChanges(ctx context.Context, cfg *config.Config, diff *Diff, opts Options) []BlockError {
+func (e *Engine) applyChanges(ctx context.Context, cfg *config.Config, diff *Diff) []BlockError {
 	var errors []BlockError
 
 	for _, blockDiff := range diff.Blocks {
-		// Skip if no changes
+		// Skip if no changes to apply
 		hasChanges := false
 		for _, change := range blockDiff.Changes {
-			if change.Change != ChangeNone {
+			if change.Change == ChangeAdd || change.Change == ChangeUpdate {
 				hasChanges = true
 				break
 			}
@@ -195,20 +186,18 @@ func (e *Engine) applyChanges(ctx context.Context, cfg *config.Config, diff *Dif
 		kv, err := vault.NewKVClient(e.vaultClient, mount, version)
 		if err != nil {
 			errors = append(errors, BlockError{Block: blockDiff.Name, Err: fmt.Errorf("creating KV client: %w", err)})
-			if opts.FailFast {
-				return errors
-			}
 			continue
 		}
 
-		// Build the data to write
+		// Build the data to write - include all managed keys
 		data := make(map[string]interface{})
 		for _, change := range blockDiff.Changes {
 			switch change.Change {
 			case ChangeAdd, ChangeUpdate, ChangeNone:
 				data[change.Key] = change.NewValue
-			case ChangeDelete:
-				// Don't include deleted keys
+			case ChangeUnmanaged:
+				// Keep unmanaged keys as-is
+				data[change.Key] = change.OldValue
 			}
 		}
 
@@ -221,16 +210,13 @@ func (e *Engine) applyChanges(ctx context.Context, cfg *config.Config, diff *Dif
 
 		if err := kv.Write(ctx, subpath, data); err != nil {
 			errors = append(errors, BlockError{Block: blockDiff.Name, Err: fmt.Errorf("writing to vault: %w", err)})
-			if opts.FailFast {
-				return errors
-			}
 		}
 	}
 
 	return errors
 }
 
-// parsePath splits a path like "kv/myapp" into mount "kv" and subpath "myapp".
+// parsePath splits a path like "secret/myapp" into mount "secret" and subpath "myapp".
 func parsePath(path string) (mount, subpath string) {
 	path = strings.Trim(path, "/")
 	parts := strings.SplitN(path, "/", 2)

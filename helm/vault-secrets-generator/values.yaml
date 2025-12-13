@@ -41,9 +41,6 @@ config:
   # Inline configuration (will be mounted as ConfigMap)
   # If empty, you must provide existingConfigMap
   inline: {}
-  #   env:
-  #     env: prod
-  #     region: us-east-1
   #   vault:
   #     address: https://vault.example.com
   #     auth:
@@ -53,7 +50,10 @@ config:
   #     main:
   #       path: kv/myapp
   #       data:
-  #         db/password: generate(length=32)
+  #         db/password: generate
+  #         db/host:
+  #           source: s3://bucket/terraform.tfstate
+  #           json: .outputs.db_host.value
 
   # Use an existing ConfigMap for the configuration
   existingConfigMap: ""
