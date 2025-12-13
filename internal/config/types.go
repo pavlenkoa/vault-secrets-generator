@@ -111,9 +111,9 @@ type Value struct {
 	Generate *PasswordPolicy
 
 	// For source values (remote JSON/YAML)
-	Source     string
-	JSONPath   string
-	YAMLPath   string
+	Source   string
+	JSONPath string
+	YAMLPath string
 
 	// For command values
 	Command string

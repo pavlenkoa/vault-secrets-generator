@@ -161,6 +161,7 @@ func (r *Resolver) resolveSource(ctx context.Context, val config.Value) (*Resolv
 // resolveCommand executes a command and returns its output.
 func (r *Resolver) resolveCommand(ctx context.Context, val config.Value) (*ResolveResult, error) {
 	// Execute the command using sh -c to support shell features
+	// #nosec G204 -- Command is intentionally user-configured
 	cmd := exec.CommandContext(ctx, "sh", "-c", val.Command)
 
 	var stdout, stderr bytes.Buffer
