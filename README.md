@@ -343,12 +343,12 @@ spec:
 
 - [ ] **Phase 8**: Additional features
   - [ ] GCS fetcher
-  - [ ] Kubernetes auth
-  - [ ] AppRole auth (implemented in client, needs testing)
-  - [ ] Helm chart
-  - [ ] Dockerfile
-  - [ ] GitHub Actions CI/CD
-  - [ ] goreleaser configuration
+  - [ ] Kubernetes auth (implemented, needs testing)
+  - [ ] AppRole auth (implemented, needs testing)
+  - [x] Helm chart
+  - [x] Dockerfile
+  - [x] GitHub Actions CI/CD
+  - [x] goreleaser configuration
 
 ## Development
 
