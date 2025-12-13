@@ -2,12 +2,12 @@
 
 ## Project Overview
 
-A lightweight, cloud-agnostic CLI tool that generates and populates secrets in HashiCorp Vault from various sources including Terraform state files, generated passwords, and static values.
+A lightweight, cloud-agnostic CLI tool that generates and populates secrets in HashiCorp Vault from various sources including remote files (Terraform state, configs), generated passwords, commands, and static values.
 
 **Primary use cases:**
-- Extract outputs from Terraform state files (S3, GCS, local) and write them to Vault
+- Extract values from remote JSON/YAML files (S3, GCS, local) and write them to Vault
 - Generate secrets with configurable password policies
-- Copy/sync secrets between Vault paths
+- Run commands to generate values (e.g., password hashing)
 - Declarative YAML configuration for GitOps workflows
 
 ## Tech Stack
@@ -29,17 +29,14 @@ vault-secrets-generator/
 │   │   └── version.go              # Version command
 │   ├── config/
 │   │   ├── config.go               # YAML config parsing
-│   │   ├── types.go                # Config structs
-│   │   └── variables.go            # Variable substitution ({env}, etc.)
+│   │   └── types.go                # Config structs
 │   ├── fetcher/
 │   │   ├── fetcher.go              # Fetcher interface
 │   │   ├── s3.go                   # S3 backend
 │   │   ├── gcs.go                  # GCS backend
 │   │   └── local.go                # Local file backend
-│   ├── tfstate/
-│   │   ├── parser.go               # Terraform state JSON parser
-│   │   └── testdata/               # Test fixtures for tfstate
-│   │       └── terraform.tfstate
+│   ├── parser/
+│   │   └── parser.go               # JSON/YAML parser with jq/yq syntax
 │   ├── generator/
 │   │   └── password.go             # Password generation with policies
 │   ├── vault/
@@ -55,8 +52,6 @@ vault-secrets-generator/
 │       └── templates/
 ├── examples/
 │   └── config.yaml                 # Example configuration file
-├── docs/
-│   └── configuration.md            # Detailed config documentation
 ├── .github/
 │   └── workflows/                  # CI/CD workflows
 ├── .goreleaser.yaml                # Release automation
@@ -75,123 +70,71 @@ vault-secrets-generator/
 The tool uses a declarative YAML configuration:
 
 ```yaml
-# Variables available for substitution throughout the config
-env:
-  env: dev
-  region: eu-west-1
-  project: myapp
-
-# Vault connection settings
 vault:
   address: https://vault.example.com
-  # Auth method: token, kubernetes, approle
   auth:
     method: kubernetes
-    role: secret-sync
+    role: vsg
 
-# Default password generation policy
 defaults:
   generate:
     length: 32
     digits: 5
     symbols: 5
-    symbolCharacters: "-_$@"
-    noUpper: false
-    allowRepeat: true
 
-# Secrets definitions grouped by Vault path
 secrets:
-  main:
-    path: kv/{env}
+  dev:
+    path: secret/dev
     data:
-      # From Terraform state - full S3 URI with output path after #
-      mysql/host: s3://terraform-state/{env}/rds/terraform.tfstate#output.endpoint
-      mysql/password: s3://terraform-state/{env}/rds/terraform.tfstate#output.admin_password
-      mysql/port: s3://terraform-state/{env}/rds/terraform.tfstate#output.port
-      
-      # Generated passwords - use defaults
-      app/api_key: generate
-      
-      # Generated with custom policy
-      app/jwt_secret: generate(length=64)
-      app/webhook_token: generate(length=48, symbols=0)
-      
-      # Static values
-      app/environment: "production"
-      app/version: "1.2.3"
+      api_key: generate
+      jwt_secret:
+        generate:
+          length: 64
+      db_host:
+        source: s3://bucket/terraform.tfstate
+        json: .outputs.db_host.value
+      db_port: "5432"
+      caddy_hash:
+        command: caddy hash-password --plaintext "mypassword"
 
-  docker:
-    path: kv/{env}-docker
+  prod:
+    path: secret/prod
     data:
-      registry/url: s3://terraform-state/{env}/ecr/terraform.tfstate#output.registry_url
-      registry/username: s3://terraform-state/{env}/ecr/terraform.tfstate#output.username
-
-  # Override Vault KV version for specific block
-  legacy:
-    path: kv/{env}-legacy
-    version: 1
-    data:
-      old/token: generate(length=24, symbols=0)
+      api_key: generate
+      db_host:
+        source: s3://bucket/prod/terraform.tfstate
+        json: .outputs.db_host.value
 ```
+
+One secret block = one Vault path = multiple key-value pairs inside.
 
 ## Value Types
 
-The tool must recognize and handle these value patterns:
+| Type | Syntax | Example |
+|------|--------|---------|
+| Static | `key: "value"` | `db_port: "5432"` |
+| Generate (defaults) | `key: generate` | `api_key: generate` |
+| Generate (custom) | `key: {generate: {length: 64}}` | `jwt_secret: {generate: {length: 64, symbols: 0}}` |
+| Remote JSON | `key: {source: ..., json: ...}` | `db_host: {source: s3://bucket/file.tfstate, json: .outputs.db_host.value}` |
+| Remote YAML | `key: {source: ..., yaml: ...}` | `config: {source: s3://bucket/config.yaml, yaml: .database.host}` |
+| Command | `key: {command: ...}` | `hash: {command: caddy hash-password --plaintext "xxx"}` |
 
-1. **Terraform State Reference:**
-   ```
-   s3://bucket/path/to/terraform.tfstate#output.some_output
-   gcs://bucket/path/to/terraform.tfstate#output.some_output
-   file:///path/to/terraform.tfstate#output.some_output
-   ```
-   Format: `<backend>://<path>#output.<output_name>`
-   
-   For nested outputs: `#output.module.rds.endpoint`
+**Source types supported:**
+- `s3://bucket/path`
+- `gcs://bucket/path`
+- `file:///path`
 
-2. **Generated Password (default policy):**
-   ```
-   generate
-   ```
-
-3. **Generated Password (custom policy):**
-   ```
-   generate(length=64)
-   generate(length=32, symbols=0)
-   generate(length=48, digits=10, noUpper=true)
-   ```
-   Supported parameters: `length`, `digits`, `symbols`, `symbolCharacters`, `noUpper`, `allowRepeat`
-
-4. **Static Value:**
-   ```
-   "any string that doesn't match above patterns"
-   ```
+**Parser syntax:**
+- `json:` uses jq-style dot notation
+- `yaml:` uses yq-style dot notation
 
 ## CLI Interface
 
 ```bash
-# Run apply with config file
 vsg apply --config config.yaml
-
-# Dry-run mode - show what would change without making changes
-vsg apply --config config.yaml --dry-run
-
-# Show diff between current and desired state
-vsg diff --config config.yaml
-
-# Apply only specific secret block
-vsg apply --config config.yaml --only main
-
-# Apply single secret
-vsg apply --config config.yaml --only main --key mysql/host
-
-# Verbose output
-vsg apply --config config.yaml -v
-
-# Output format
-vsg diff --config config.yaml --output json
-vsg diff --config config.yaml --output yaml
-
-# Version
+vsg apply --config config.yaml --force      # regenerate all passwords
+vsg apply --config config.yaml --dry-run    # preview changes
+vsg diff --config config.yaml               # show diff
 vsg version
 ```
 
@@ -200,25 +143,43 @@ vsg version
 - `0` - Success, all secrets synced
 - `1` - Configuration error
 - `2` - Vault connection/auth error
-- `3` - State file fetch error
+- `3` - Source file fetch error
 - `4` - Partial failure (some secrets failed)
+
+## Reconciliation Strategy
+
+| Scenario | Behavior |
+|----------|----------|
+| Key in config, not in Vault | Create |
+| Key in config (generate), exists in Vault | Skip (keep existing) |
+| Key in config (generate) + `--force` flag | Regenerate |
+| Key in config (source), value changed | Update |
+| Key in config (static), value changed | Update |
+| Key in config (command) | Run command, update if changed |
+| Key in Vault, not in config | Warn (log unmanaged key) |
+
+No deletion support - use vault CLI directly for that.
+
+## Vault Auto-Detection
+
+VSG auto-detects KV v1 vs v2 by querying `/sys/mounts`. User just specifies the path (e.g., `secret/dev`), VSG figures out the engine version and uses the appropriate API.
 
 ## Core Logic
 
 ### Reconciliation Flow
 
 1. Parse and validate config YAML
-2. Substitute variables (`{env}`, `{region}`, etc.)
-3. For each secret block:
+2. For each secret block:
    a. Connect to Vault at specified path
    b. Read current secrets (if exist)
    c. For each secret in data:
-      - If terraform reference: fetch state, extract output
+      - If source reference: fetch file, extract value using json/yaml parser
       - If generate: generate password (only if secret doesn't exist OR --force)
+      - If command: run command and capture output
       - If static: use value as-is
    d. Compare current vs desired
    e. Write changes to Vault (unless --dry-run)
-4. Report results
+3. Report results
 
 ### Important Behaviors
 
@@ -227,16 +188,12 @@ vsg version
    - Use `--force` flag to regenerate existing secrets
    - This prevents password rotation on every run
 
-2. **Terraform state caching:**
-   - Cache fetched state files during a single run
-   - Multiple secrets from same state file = one fetch
+2. **Source file caching:**
+   - Cache fetched files during a single run
+   - Multiple secrets from same source file = one fetch
 
-3. **Vault KV version detection:**
-   - Auto-detect v1 vs v2 if not specified
-   - Allow explicit override per block
-
-4. **Error handling:**
-   - Continue on individual secret failures (unless --fail-fast)
+3. **Error handling:**
+   - Continue on individual secret failures
    - Report all errors at end
    - Detailed error messages with context
 
@@ -244,9 +201,9 @@ vsg version
 
 ```go
 type Fetcher interface {
-    // Fetch retrieves the terraform state file and returns its contents
+    // Fetch retrieves a file and returns its contents
     Fetch(ctx context.Context, uri string) ([]byte, error)
-    
+
     // Supports returns true if this fetcher handles the given URI scheme
     Supports(uri string) bool
 }
@@ -256,40 +213,6 @@ Implementations needed:
 - `s3://` - AWS S3 (use AWS SDK, support IRSA and standard credential chain)
 - `gcs://` - Google Cloud Storage
 - `file://` - Local filesystem
-
-## Terraform State Parser
-
-Terraform state is JSON. Need to extract outputs from:
-
-```json
-{
-  "version": 4,
-  "outputs": {
-    "endpoint": {
-      "value": "mydb.123456.us-east-1.rds.amazonaws.com",
-      "type": "string"
-    }
-  }
-}
-```
-
-Also handle module outputs:
-```json
-{
-  "outputs": {},
-  "resources": [...],
-  "child_modules": [
-    {
-      "address": "module.rds",
-      "outputs": {
-        "endpoint": {"value": "..."}
-      }
-    }
-  ]
-}
-```
-
-The path `output.module.rds.endpoint` should navigate to child module outputs.
 
 ## Password Generator
 
@@ -339,7 +262,7 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o vsg ./cmd/vsg
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o vsg .
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates
@@ -365,14 +288,14 @@ gopkg.in/yaml.v3                # YAML parsing
 
 ## Implementation Order
 
-1. **Phase 1:** Config parsing + variable substitution
+1. **Phase 1:** Config parsing
 2. **Phase 2:** Password generator
-3. **Phase 3:** Local file fetcher + tfstate parser
+3. **Phase 3:** Local file fetcher + JSON/YAML parser
 4. **Phase 4:** Vault client (token auth, KV v2)
 5. **Phase 5:** S3 fetcher
 6. **Phase 6:** Reconciliation engine + dry-run
 7. **Phase 7:** CLI with cobra
-8. **Phase 8:** Additional features (GCS, KV v1, approle, etc.)
+8. **Phase 8:** Additional features (GCS, command execution, etc.)
 
 ## Code Style
 
@@ -405,7 +328,7 @@ spec:
           serviceAccountName: vsg
           containers:
             - name: vsg
-              image: ghcr.io/yourname/vsg:latest
+              image: ghcr.io/pavlenkoa/vault-secrets-generator:latest
               args: ["apply", "--config", "/etc/config/secrets.yaml"]
               env:
                 - name: VAULT_ADDR
@@ -427,3 +350,4 @@ spec:
 - Multi-Vault support (single Vault per config)
 - Webhooks or event-driven sync
 - Web UI
+- Automatic deletion of unmanaged keys
