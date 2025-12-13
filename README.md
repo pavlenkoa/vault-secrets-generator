@@ -1,11 +1,12 @@
 # VSG - Vault Secrets Generator
 
-A lightweight, cloud-agnostic CLI tool that generates and populates secrets in HashiCorp Vault from various sources including Terraform state files, generated passwords, and static values.
+A lightweight, cloud-agnostic CLI tool that generates and populates secrets in HashiCorp Vault from various sources including remote files, generated passwords, commands, and static values.
 
 ## Features
 
-- **Terraform State Integration**: Extract outputs from Terraform state files stored in S3, GCS, or local filesystem
+- **Remote File Integration**: Extract values from JSON/YAML files stored in S3, GCS, or local filesystem using jq/yq-style paths
 - **Password Generation**: Generate secure passwords with configurable policies (length, digits, symbols, etc.)
+- **Command Execution**: Generate values by running shell commands (e.g., password hashing)
 - **Declarative Configuration**: YAML-based configuration for GitOps workflows
 - **Idempotent Operations**: Generated passwords are preserved unless explicitly forced to regenerate
 - **Dry-Run Support**: Preview changes before applying them
@@ -41,18 +42,21 @@ go build -ldflags "-X github.com/pavlenkoa/vault-secrets-generator/internal/comm
 1. Create a configuration file `config.yaml`:
 
 ```yaml
-env:
-  env: prod
-  region: us-east-1
-
 secrets:
-  main:
-    path: kv/myapp
+  database:
+    path: kv/prod/database
     data:
-      db/password: generate(length=32)
-      db/host: s3://terraform-state/prod/rds/terraform.tfstate#output.endpoint
-      api/key: generate
-      app/environment: "production"
+      host:
+        source: s3://terraform-state/prod/rds/terraform.tfstate
+        json: .outputs.endpoint.value
+      password: generate
+      port: "5432"
+
+  app:
+    path: kv/prod/app
+    data:
+      api_key: generate
+      environment: "production"
 ```
 
 2. Set up Vault credentials:
@@ -97,9 +101,6 @@ vsg apply --config config.yaml [flags]
 |------|-------------|
 | `--dry-run` | Show what would be done without making changes |
 | `--force` | Force regeneration of generated secrets |
-| `--fail-fast` | Stop on first error |
-| `--only <block>` | Only process this secret block |
-| `--key <key>` | Only process this key (requires `--only`) |
 
 #### `vsg diff`
 
@@ -112,7 +113,6 @@ vsg diff --config config.yaml [flags]
 | Flag | Description |
 |------|-------------|
 | `--output` | Output format: `text` (default) or `json` |
-| `--only <block>` | Only process this secret block |
 
 #### `vsg delete`
 
@@ -141,12 +141,6 @@ vsg version
 ### Full Example
 
 ```yaml
-# Variables for substitution throughout the config
-env:
-  env: prod
-  region: us-east-1
-  project: myapp
-
 # Vault connection settings
 vault:
   address: https://vault.example.com
@@ -178,50 +172,98 @@ defaults:
 
 # Secrets definitions
 secrets:
-  main:
-    path: kv/{env}/{project}
+  database:
+    path: kv/prod/database
     # version: 2  # KV engine version (auto-detected if not set)
     data:
-      # From Terraform state
-      db/host: s3://terraform-state/{env}/rds/terraform.tfstate#output.endpoint
-      db/port: s3://terraform-state/{env}/rds/terraform.tfstate#output.port
+      # From remote JSON file (Terraform state, API response, etc.)
+      host:
+        source: s3://terraform-state/prod/rds/terraform.tfstate
+        json: .outputs.endpoint.value
 
-      # From local Terraform state
-      local/value: file:///path/to/terraform.tfstate#output.some_output
+      port:
+        source: s3://terraform-state/prod/rds/terraform.tfstate
+        json: .outputs.port.value
 
-      # Generated passwords with default policy
-      db/password: generate
+      # Generated password with default policy
+      password: generate
+
+  app:
+    path: kv/prod/app
+    data:
+      # From local YAML file
+      db_name:
+        source: file:///etc/app/config.yaml
+        yaml: .database.name
 
       # Generated with custom policy
-      api/key: generate(length=64)
-      jwt/secret: generate(length=48, symbols=0)
-      simple/token: generate(length=24, digits=0, symbols=0)
+      api_key: generate
+
+      jwt_secret:
+        generate:
+          length: 64
+
+      webhook_token:
+        generate:
+          length: 48
+          symbols: 0
+
+      # From command execution
+      password_hash:
+        command: htpasswd -nbB admin secret123 | cut -d: -f2
 
       # Static values
-      app/environment: "{env}"
-      app/version: "1.2.3"
+      environment: "production"
+      version: "1.2.3"
 
   docker:
-    path: kv/{env}-docker
+    path: kv/prod/docker
     data:
-      registry/url: s3://terraform-state/{env}/ecr/terraform.tfstate#output.registry_url
+      registry_url:
+        source: s3://terraform-state/prod/ecr/terraform.tfstate
+        json: .outputs.registry_url.value
+
+      registry_token:
+        generate:
+          length: 64
+          symbols: 0
 ```
 
 ### Value Types
 
-#### Terraform State References
+#### Remote Source with JSON Path
 
-Extract values from Terraform state files:
+Extract values from remote JSON files using jq-style paths:
 
 ```yaml
-# S3 backend
-value: s3://bucket/path/terraform.tfstate#output.output_name
+# From S3
+db_host:
+  source: s3://bucket/path/terraform.tfstate
+  json: .outputs.endpoint.value
 
-# Local file
-value: file:///path/to/terraform.tfstate#output.output_name
+# From local file
+config_value:
+  source: file:///path/to/config.json
+  json: .database.host
 
-# Module outputs
-value: s3://bucket/state.tfstate#output.module.rds.endpoint
+# Nested paths and arrays
+item:
+  source: s3://bucket/data.json
+  json: .items[0].name
+```
+
+#### Remote Source with YAML Path
+
+Extract values from remote YAML files using yq-style paths:
+
+```yaml
+db_name:
+  source: file:///etc/app/config.yaml
+  yaml: .database.name
+
+server_ip:
+  source: s3://bucket/servers.yaml
+  yaml: .servers[1].ip
 ```
 
 #### Generated Passwords
@@ -230,44 +272,48 @@ value: s3://bucket/state.tfstate#output.module.rds.endpoint
 # Use default policy
 password: generate
 
-# Custom length
-password: generate(length=64)
+# Custom policy inline
+api_key:
+  generate:
+    length: 64
+    symbols: 0
+    digits: 10
 
-# Custom policy
-password: generate(length=32, digits=10, symbols=0, noUpper=true)
+# Available options:
+#   length: 32           # Total password length
+#   digits: 5            # Minimum number of digits
+#   symbols: 5           # Minimum number of symbols
+#   symbolCharacters: "-_$@"  # Allowed symbols
+#   noUpper: false       # Exclude uppercase letters
+#   allowRepeat: true    # Allow repeated characters
 ```
 
-**Available parameters:**
-- `length` - Total password length (default: 32)
-- `digits` - Minimum number of digits (default: 5)
-- `symbols` - Minimum number of symbols (default: 5)
-- `symbolCharacters` - Allowed symbols (default: `-_$@`)
-- `noUpper` - Exclude uppercase letters (default: false)
-- `allowRepeat` - Allow repeated characters (default: true)
+#### Command Execution
+
+Generate values by running shell commands:
+
+```yaml
+# Simple command
+timestamp:
+  command: date +%Y-%m-%d
+
+# Password hashing
+password_hash:
+  command: htpasswd -nbB admin secret123 | cut -d: -f2
+
+# Complex commands
+ssh_key:
+  command: ssh-keygen -t ed25519 -f /dev/stdout -N "" -q | head -n 5
+```
 
 #### Static Values
 
-Any value that doesn't match the above patterns is treated as a static value:
+Any simple string value is treated as static:
 
 ```yaml
-key: "my-static-value"
-key: "{env}-config"  # Variables are substituted
-```
-
-### Variable Substitution
-
-Variables defined in the `env` section can be used throughout the config with `{variable}` syntax:
-
-```yaml
-env:
-  env: prod
-  region: us-east-1
-
-secrets:
-  main:
-    path: kv/{env}/{region}  # Becomes: kv/prod/us-east-1
-    data:
-      key: s3://bucket/{env}/state.tfstate#output.value
+environment: "production"
+version: "1.2.3"
+api_url: "https://api.example.com"
 ```
 
 ## Environment Variables
@@ -327,28 +373,17 @@ spec:
           restartPolicy: OnFailure
 ```
 
-## Implementation Status
+## Helm Chart
 
-### Completed
+A Helm chart is available for easy Kubernetes deployment:
 
-- [x] **Phase 1**: Config parsing + variable substitution
-- [x] **Phase 2**: Password generator with configurable policies
-- [x] **Phase 3**: Local file fetcher + Terraform state parser
-- [x] **Phase 4**: Vault client (token auth, KV v1/v2)
-- [x] **Phase 5**: S3 fetcher (AWS SDK v2)
-- [x] **Phase 6**: Reconciliation engine + dry-run
-- [x] **Phase 7**: CLI with cobra
+```bash
+helm install vsg ./helm/vault-secrets-generator \
+  --set config.inline.vault.address=https://vault.example.com \
+  --set auth.kubernetes.role=vsg
+```
 
-### Planned
-
-- [ ] **Phase 8**: Additional features
-  - [ ] GCS fetcher
-  - [ ] Kubernetes auth (implemented, needs testing)
-  - [ ] AppRole auth (implemented, needs testing)
-  - [x] Helm chart
-  - [x] Dockerfile
-  - [x] GitHub Actions CI/CD
-  - [x] goreleaser configuration
+See [helm/vault-secrets-generator/values.yaml](helm/vault-secrets-generator/values.yaml) for all options.
 
 ## Development
 
@@ -382,13 +417,12 @@ vault-secrets-generator/
 │   │   └── version.go
 │   ├── config/                     # Configuration parsing
 │   │   ├── config.go
-│   │   ├── types.go
-│   │   └── variables.go
-│   ├── fetcher/                    # State file fetchers
+│   │   └── types.go
+│   ├── fetcher/                    # Remote file fetchers
 │   │   ├── fetcher.go
 │   │   ├── local.go
 │   │   └── s3.go
-│   ├── tfstate/                    # Terraform state parser
+│   ├── parser/                     # JSON/YAML extraction
 │   │   └── parser.go
 │   ├── generator/                  # Password generation
 │   │   └── password.go
@@ -399,6 +433,8 @@ vault-secrets-generator/
 │       ├── reconcile.go
 │       ├── resolver.go
 │       └── diff.go
+├── helm/                           # Helm chart
+│   └── vault-secrets-generator/
 ├── examples/
 │   └── config.yaml
 ├── go.mod

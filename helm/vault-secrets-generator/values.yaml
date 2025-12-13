@@ -41,19 +41,35 @@ config:
   # Inline configuration (will be mounted as ConfigMap)
   # If empty, you must provide existingConfigMap
   inline: {}
+  # Example:
   #   vault:
   #     address: https://vault.example.com
   #     auth:
   #       method: kubernetes
   #       role: vsg
+  #   defaults:
+  #     generate:
+  #       length: 32
+  #       digits: 5
+  #       symbols: 5
   #   secrets:
-  #     main:
-  #       path: kv/myapp
+  #     database:
+  #       path: kv/prod/database
   #       data:
-  #         db/password: generate
-  #         db/host:
-  #           source: s3://bucket/terraform.tfstate
-  #           json: .outputs.db_host.value
+  #         host:
+  #           source: s3://terraform-state/prod/rds/terraform.tfstate
+  #           json: .outputs.endpoint.value
+  #         password: generate
+  #         port: "5432"
+  #     app:
+  #       path: kv/prod/app
+  #       data:
+  #         api_key: generate
+  #         jwt_secret:
+  #           generate:
+  #             length: 64
+  #             symbols: 0
+  #         environment: "production"
 
   # Use an existing ConfigMap for the configuration
   existingConfigMap: ""
@@ -91,7 +107,7 @@ auth:
     roleIdKey: "role_id"
     secretIdKey: "secret_id"
 
-# AWS configuration (for S3 state files)
+# AWS configuration (for S3 source files)
 aws:
   # AWS region
   region: ""
