@@ -84,7 +84,7 @@ func TestLocalFetcher_Fetch_EmptyPath(t *testing.T) {
 	}
 }
 
-func TestLocalFetcher_Fetch_Cancelled(t *testing.T) {
+func TestLocalFetcher_Fetch_Canceled(t *testing.T) {
 	f := NewLocalFetcher()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately

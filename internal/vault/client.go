@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/hashicorp/vault/api"
+
 	"github.com/pavlenkoa/vault-secrets-generator/internal/config"
 )
 

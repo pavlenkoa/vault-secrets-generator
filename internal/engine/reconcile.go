@@ -21,8 +21,8 @@ type Engine struct {
 // Options configures the engine behavior.
 type Options struct {
 	DryRun   bool
-	Force    bool // Force regeneration of generated secrets
-	FailFast bool // Stop on first error
+	Force    bool   // Force regeneration of generated secrets
+	FailFast bool   // Stop on first error
 	Only     string // Only process this block
 	Key      string // Only process this key (requires Only)
 }

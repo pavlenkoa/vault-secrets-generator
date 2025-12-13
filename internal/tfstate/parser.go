@@ -15,8 +15,8 @@ type State struct {
 
 // StateValues contains the root module values (Terraform 0.12+ format).
 type StateValues struct {
-	Outputs      map[string]OutputValue `json:"outputs"`
-	RootModule   *Module                `json:"root_module"`
+	Outputs    map[string]OutputValue `json:"outputs"`
+	RootModule *Module                `json:"root_module"`
 }
 
 // Module represents a Terraform module in the state.

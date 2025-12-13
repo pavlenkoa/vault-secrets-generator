@@ -18,7 +18,6 @@ linters:
     - gosec
     - bodyclose
     - noctx
-    - exportloopref
     - prealloc
     - revive
 

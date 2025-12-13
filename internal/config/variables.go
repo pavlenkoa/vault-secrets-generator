@@ -36,11 +36,7 @@ func substituteVariables(cfg *Config) error {
 	}
 
 	// Validate no unresolved variables remain
-	if err := checkUnresolvedVariables(cfg); err != nil {
-		return err
-	}
-
-	return nil
+	return checkUnresolvedVariables(cfg)
 }
 
 // substituteString replaces all {var} patterns in s with values from vars.

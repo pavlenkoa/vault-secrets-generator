@@ -11,11 +11,11 @@ import (
 
 // Exit codes
 const (
-	ExitSuccess         = 0
-	ExitConfigError     = 1
-	ExitVaultError      = 2
-	ExitFetchError      = 3
-	ExitPartialFailure  = 4
+	ExitSuccess        = 0
+	ExitConfigError    = 1
+	ExitVaultError     = 2
+	ExitFetchError     = 3
+	ExitPartialFailure = 4
 )
 
 var (

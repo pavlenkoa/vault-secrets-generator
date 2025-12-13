@@ -88,7 +88,7 @@ func validate(cfg *Config) error {
 	minRequired := cfg.Defaults.Generate.Digits + cfg.Defaults.Generate.Symbols
 	if !cfg.Defaults.Generate.NoUpper {
 		// Need at least some room for letters
-		minRequired += 1
+		minRequired++
 	}
 	if cfg.Defaults.Generate.Length < minRequired {
 		return fmt.Errorf("defaults.generate.length (%d) is too small for required digits (%d) and symbols (%d)",

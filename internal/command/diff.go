@@ -74,11 +74,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	}
 
 	// Set up fetchers
-	registry, err := setupFetchers(ctx)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error: failed to set up fetchers:", err)
-		os.Exit(ExitFetchError)
-	}
+	registry := setupFetchers(ctx)
 
 	// Create engine
 	eng := engine.NewEngine(vaultClient, registry, cfg.Defaults.Generate, log)

@@ -37,6 +37,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/pavlenkoa/vault-secrets-generator
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -45,4 +55,5 @@ jobs:
         with:
           context: .
           push: false
-          tags: vault-secrets-generator:test
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

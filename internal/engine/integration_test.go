@@ -49,9 +49,9 @@ func TestIntegration_Reconcile(t *testing.T) {
 			"test": {
 				Path: "kv/vsg-integration-test",
 				Data: map[string]string{
-					"static_value":    "hello-world",
-					"generated_pass":  "generate(length=16, symbols=0)",
-					"another_static":  "test-value-123",
+					"static_value":   "hello-world",
+					"generated_pass": "generate(length=16, symbols=0)",
+					"another_static": "test-value-123",
 				},
 			},
 		},

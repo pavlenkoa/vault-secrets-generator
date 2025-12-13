@@ -19,13 +19,13 @@ const (
 
 // SecretChange represents a change to a single secret key.
 type SecretChange struct {
-	Key        string      `json:"key"`
-	Change     ChangeType  `json:"change"`
-	OldValue   string      `json:"-"` // Never expose in JSON
-	NewValue   string      `json:"-"` // Never expose in JSON
-	Source     ValueSource `json:"source"`
-	OldMasked  string      `json:"old_value,omitempty"`
-	NewMasked  string      `json:"new_value,omitempty"`
+	Key       string      `json:"key"`
+	Change    ChangeType  `json:"change"`
+	OldValue  string      `json:"-"` // Never expose in JSON
+	NewValue  string      `json:"-"` // Never expose in JSON
+	Source    ValueSource `json:"source"`
+	OldMasked string      `json:"old_value,omitempty"`
+	NewMasked string      `json:"new_value,omitempty"`
 }
 
 // BlockDiff represents changes to a secret block.
