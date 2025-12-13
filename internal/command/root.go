@@ -87,3 +87,26 @@ func getLogger() *slog.Logger {
 	}
 	return logger
 }
+
+// parsePath splits a path like "kv/myapp" into mount "kv" and subpath "myapp".
+func parsePath(path string) (mount, subpath string) {
+	path = trimSlashes(path)
+	for i := 0; i < len(path); i++ {
+		if path[i] == '/' {
+			return path[:i], path[i+1:]
+		}
+	}
+	return path, ""
+}
+
+func trimSlashes(s string) string {
+	start := 0
+	end := len(s)
+	for start < end && s[start] == '/' {
+		start++
+	}
+	for end > start && s[end-1] == '/' {
+		end--
+	}
+	return s[start:end]
+}
