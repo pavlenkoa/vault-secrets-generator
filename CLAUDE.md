@@ -486,3 +486,74 @@ spec:
 - [ ] Azure Blob Storage fetcher
 - [ ] Kubernetes auth
 - [ ] AppRole auth
+- [ ] Password hashing functions with referential values (see below)
+
+## Planned Feature: Password Hashing Functions
+
+### Overview
+
+Add native password hashing functions that can reference other keys in the same secret block. This enables generating a password and its hash in a single declarative config.
+
+### Proposed Syntax
+
+```hcl
+secret "kv/authelia" {
+  # Generate a random password
+  admin_password = generate({length = 32})
+
+  # Hash the generated password with argon2id
+  admin_password_hash = argon2({from = "admin_password"})
+
+  # Generate OIDC client secret and its PBKDF2 hash
+  oidc_client_plaintext = generate({length = 64, symbols = 0})
+  oidc_client_secret = pbkdf2({from = "oidc_client_plaintext", variant = "sha512"})
+
+  # bcrypt example
+  api_key = generate()
+  api_key_hash = bcrypt({from = "api_key", cost = 12})
+}
+```
+
+### Supported Algorithms
+
+| Function | Output Format | Use Cases |
+|----------|---------------|-----------|
+| `bcrypt({from, cost})` | `$2a$cost$salt...hash` | Most web frameworks (Rails, Django, Node.js) |
+| `argon2({from, variant, memory, iterations, parallelism})` | `$argon2id$v=19$m=65536,t=3,p=4$salt$hash` | Authelia, Bitwarden, modern apps |
+| `pbkdf2({from, variant, iterations})` | `$pbkdf2-sha512$iterations$salt$hash` | Enterprise/FIPS compliance, Authelia OIDC |
+
+### Default Parameters
+
+| Algorithm | Parameter | Default |
+|-----------|-----------|---------|
+| bcrypt | cost | 12 |
+| argon2 | variant | id |
+| argon2 | memory | 65536 (64MB) |
+| argon2 | iterations | 3 |
+| argon2 | parallelism | 4 |
+| pbkdf2 | variant | sha512 |
+| pbkdf2 | iterations | 310000 |
+
+### Implementation Requirements
+
+1. **Referential Evaluation**: Engine must resolve dependencies in topological order
+   - Parse `from` references to build dependency graph
+   - Detect cycles and report errors
+   - Resolve base values first, then derived values
+
+2. **PHC String Formatting**: Output must match standard Password Hashing Competition format
+   - Salt generation using crypto/rand
+   - Proper base64 encoding (standard or raw depending on algorithm)
+   - Version and parameter encoding
+
+3. **Go Libraries**:
+   - bcrypt: `golang.org/x/crypto/bcrypt`
+   - argon2: `golang.org/x/crypto/argon2`
+   - pbkdf2: `crypto/pbkdf2` (stdlib)
+
+### Strategy Behavior
+
+Hash functions use `create` strategy by default (like `generate()`):
+- If the hash already exists in Vault, skip regeneration
+- Use `--force` flag to regenerate all passwords and hashes
+- Can override with `strategy = "update"` if needed
