@@ -7,8 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pavlenkoa/vault-secrets-generator/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/pavlenkoa/vault-secrets-generator/internal/config"
 )
 
 // Exit codes

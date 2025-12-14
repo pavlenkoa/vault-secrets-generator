@@ -85,40 +85,12 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("VAULT_ADDR environment variable is required")
 	}
 
-	// Create minimal vault config for client
-	vaultCfg := struct {
-		Address   string
-		Namespace string
-		Auth      struct {
-			Method    string
-			Token     string
-			Role      string
-			RoleID    string
-			SecretID  string
-			MountPath string
-		}
-	}{
-		Address: vaultAddr,
-		Auth: struct {
-			Method    string
-			Token     string
-			Role      string
-			RoleID    string
-			SecretID  string
-			MountPath string
-		}{
-			Method: "token",
-		},
-	}
-
-	// Check for namespace
-	if ns := os.Getenv("VAULT_NAMESPACE"); ns != "" {
-		vaultCfg.Namespace = ns
-	}
+	// Get optional namespace
+	namespace := os.Getenv("VAULT_NAMESPACE")
 
 	log.Debug("connecting to vault", "address", vaultAddr)
 
-	vaultClient, err := vault.NewClientFromEnv(vaultAddr, vaultCfg.Namespace)
+	vaultClient, err := vault.NewClientFromEnv(vaultAddr, namespace)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error: failed to connect to Vault:", err)
 		os.Exit(ExitVaultError)

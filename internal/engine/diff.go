@@ -13,7 +13,7 @@ type ChangeType string
 const (
 	ChangeAdd       ChangeType = "add"
 	ChangeUpdate    ChangeType = "update"
-	ChangeDelete    ChangeType = "delete"    // Key will be pruned
+	ChangeDelete    ChangeType = "delete" // Key will be pruned
 	ChangeNone      ChangeType = "none"
 	ChangeUnmanaged ChangeType = "unmanaged" // Key exists in Vault but not in config (prune=false)
 )
