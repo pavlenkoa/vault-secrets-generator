@@ -89,6 +89,12 @@ release:
 
     ## Installation
 
+    ### Homebrew (macOS/Linux)
+    ```bash
+    brew install pavlenkoa/tap/vsg
+    ```
+
+    ### Binary
     Download the appropriate binary for your platform from the assets below.
 
 dockers_v2:
