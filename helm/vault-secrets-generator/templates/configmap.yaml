@@ -7,5 +7,5 @@ metadata:
     {{- include "vault-secrets-generator.labels" . | nindent 4 }}
 data:
   {{ .Values.config.configKey }}: |
-    {{- .Values.config.inline | toYaml | nindent 4 }}
+    {{- .Values.config.inline | nindent 4 }}
 {{- end }}

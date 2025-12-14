@@ -56,8 +56,7 @@ vault-secrets-generator/
 │       ├── values.yaml
 │       └── templates/
 ├── examples/
-│   ├── config.hcl                  # Example HCL configuration (v2.0)
-│   └── config.yaml                 # Example YAML configuration (v1.x)
+│   └── config.hcl                  # Example HCL configuration
 ├── .github/
 │   └── workflows/                  # CI/CD workflows
 ├── .goreleaser.yaml                # Release automation
@@ -105,11 +104,11 @@ defaults {
   }
 }
 
-secret "secret/${env("ENV")}/app" {
+secret "secret/dev/app" {
   prune       = true
   api_key     = generate()
-  jwt_secret  = generate(length = 64, symbols = 0)
-  db_host     = json("s3://bucket/${env("ENV")}/terraform.tfstate", ".outputs.db_host.value")
+  jwt_secret  = generate({length = 64, symbols = 0})
+  db_host     = json("s3://bucket/dev/terraform.tfstate", ".outputs.db_host.value")
   db_port     = "5432"
   config_host = yaml("gcs://bucket/config.yaml", ".database.host")
   ssh_key     = raw("s3://bucket/keys/deploy.pem")
@@ -117,7 +116,7 @@ secret "secret/${env("ENV")}/app" {
   caddy_hash  = command("caddy hash-password --plaintext mypassword")
 
   # Per-key strategy override
-  special     = generate(length = 64, strategy = "update")
+  special     = generate({length = 64, strategy = "update"})
 }
 ```
 
@@ -129,18 +128,18 @@ One secret block = one Vault path = multiple key-value pairs inside.
 |------|--------|---------|
 | Static | `key = "value"` | `db_port = "5432"` |
 | Generate | `key = generate()` | `api_key = generate()` |
-| Generate (custom) | `key = generate(...)` | `jwt_secret = generate(length = 64, symbols = 0)` |
+| Generate (custom) | `key = generate({...})` | `jwt_secret = generate({length = 64, symbols = 0})` |
 | JSON | `key = json(url, query)` | `db_host = json("s3://...", ".outputs.db_host.value")` |
 | YAML | `key = yaml(url, query)` | `config = yaml("gcs://...", ".database.host")` |
 | Raw | `key = raw(url)` | `ssh_key = raw("s3://bucket/key.pem")` |
 | Vault | `key = vault(path, key)` | `shared = vault("secret/shared", "api_key")` |
 | Command | `key = command(cmd)` | `hash = command("caddy hash-password ...")` |
 
-All functions support optional `strategy` parameter:
+All functions support optional `strategy` parameter via object literal:
 
 ```hcl
-db_host = json("s3://...", ".outputs.db_host.value", strategy = "create")
-ssh_key = raw("s3://bucket/key.pem", strategy = "create")
+db_host = json("s3://...", ".outputs.db_host.value", {strategy = "create"})
+ssh_key = raw("s3://bucket/key.pem", {strategy = "create"})
 ```
 
 ## URL Schemes
@@ -166,12 +165,16 @@ For `json()`, `yaml()`, `raw()` functions:
 
 ## Environment Variables: env() Function
 
+The `env()` function retrieves values from environment variables or `--var` CLI flags:
+
 ```hcl
-secret "secret/${env("ENV")}/app" {
-  db_host = json("s3://${env("BUCKET")}/${env("ENV")}/terraform.tfstate", ".outputs.db_host.value")
+secret "secret/dev/app" {
+  db_host = json("s3://my-bucket/dev/terraform.tfstate", ".outputs.db_host.value")
   region  = env("REGION")
 }
 ```
+
+Note: Template interpolation (`${...}`) is not supported in HCL block labels or string values. Use `env()` for individual values.
 
 Usage:
 

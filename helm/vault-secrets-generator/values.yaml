@@ -36,45 +36,45 @@ cronjob:
   # Suspend the cronjob
   suspend: false
 
-# VSG configuration
+# VSG configuration (HCL format)
 config:
-  # Inline configuration (will be mounted as ConfigMap)
+  # Inline HCL configuration (will be mounted as ConfigMap)
   # If empty, you must provide existingConfigMap
-  inline: {}
   # Example:
-  #   vault:
-  #     address: https://vault.example.com
-  #     auth:
-  #       method: kubernetes
-  #       role: vsg
-  #   defaults:
-  #     generate:
-  #       length: 32
-  #       digits: 5
-  #       symbols: 5
-  #   secrets:
-  #     database:
-  #       path: kv/prod/database
-  #       data:
-  #         host:
-  #           source: s3://terraform-state/prod/rds/terraform.tfstate
-  #           json: .outputs.endpoint.value
-  #         password: generate
-  #         port: "5432"
-  #     app:
-  #       path: kv/prod/app
-  #       data:
-  #         api_key: generate
-  #         jwt_secret:
-  #           generate:
-  #             length: 64
-  #             symbols: 0
-  #         environment: "production"
+  # inline: |
+  #   vault {
+  #     address = "https://vault.example.com"
+  #     auth {
+  #       method = "kubernetes"
+  #       role   = "vsg"
+  #     }
+  #   }
+  #
+  #   defaults {
+  #     generate {
+  #       length  = 32
+  #       digits  = 5
+  #       symbols = 5
+  #     }
+  #   }
+  #
+  #   secret "kv/prod/database" {
+  #     host     = json("s3://terraform-state/prod/rds.tfstate", ".outputs.endpoint.value")
+  #     password = generate()
+  #     port     = "5432"
+  #   }
+  #
+  #   secret "kv/prod/app" {
+  #     api_key    = generate()
+  #     jwt_secret = generate({length = 64, symbols = 0})
+  #     environment = "production"
+  #   }
+  inline: ""
 
   # Use an existing ConfigMap for the configuration
   existingConfigMap: ""
   # Key in the ConfigMap containing the config
-  configKey: "config.yaml"
+  configKey: "config.hcl"
 
 # Vault configuration
 vault:
