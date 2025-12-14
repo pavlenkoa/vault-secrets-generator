@@ -20,7 +20,7 @@ A lightweight, cloud-agnostic CLI tool that generates and populates secrets in H
 ### Homebrew (macOS/Linux)
 
 ```bash
-brew install --cask pavlenkoa/tap/vsg
+brew install pavlenkoa/tap/vsg
 ```
 
 ### From Source
