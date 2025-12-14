@@ -36,6 +36,17 @@ cronjob:
   # Suspend the cronjob
   suspend: false
 
+# Initial Job configuration (runs on helm install/upgrade)
+initialJob:
+  # Enable initial job to create secrets immediately
+  enabled: true
+  # How many times to retry on failure
+  backoffLimit: 3
+  # Delete job after completion (seconds), 0 to keep forever
+  ttlSecondsAfterFinished: 300
+  # Hook delete policy: hook-succeeded, hook-failed, before-hook-creation
+  hookDeletePolicy: hook-succeeded
+
 # VSG configuration (HCL format)
 config:
   # Inline HCL configuration (will be mounted as ConfigMap)

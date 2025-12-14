@@ -1,0 +1,110 @@
+{{- if .Values.initialJob.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "vault-secrets-generator.fullname" . }}-init
+  labels:
+    {{- include "vault-secrets-generator.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": {{ .Values.initialJob.hookDeletePolicy }}
+spec:
+  ttlSecondsAfterFinished: {{ .Values.initialJob.ttlSecondsAfterFinished }}
+  backoffLimit: {{ .Values.initialJob.backoffLimit }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "vault-secrets-generator.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "vault-secrets-generator.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      restartPolicy: OnFailure
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - apply
+            - --config
+            - /etc/vsg/{{ .Values.config.configKey }}
+            {{- range .Values.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          env:
+            {{- if .Values.vault.address }}
+            - name: VAULT_ADDR
+              value: {{ .Values.vault.address | quote }}
+            {{- end }}
+            {{- if .Values.vault.namespace }}
+            - name: VAULT_NAMESPACE
+              value: {{ .Values.vault.namespace | quote }}
+            {{- end }}
+            {{- if .Values.aws.region }}
+            - name: AWS_REGION
+              value: {{ .Values.aws.region | quote }}
+            {{- end }}
+            {{- if eq .Values.auth.method "token" }}
+            {{- if .Values.auth.token.existingSecret }}
+            - name: VAULT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.token.existingSecret }}
+                  key: {{ .Values.auth.token.secretKey }}
+            {{- end }}
+            {{- end }}
+            {{- if eq .Values.auth.method "approle" }}
+            {{- if .Values.auth.approle.existingSecret }}
+            - name: VAULT_ROLE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.approle.existingSecret }}
+                  key: {{ .Values.auth.approle.roleIdKey }}
+            - name: VAULT_SECRET_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.approle.existingSecret }}
+                  key: {{ .Values.auth.approle.secretIdKey }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/vsg
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "vault-secrets-generator.configMapName" . }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
