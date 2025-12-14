@@ -17,6 +17,12 @@ A lightweight, cloud-agnostic CLI tool that generates and populates secrets in H
 
 ## Installation
 
+### Homebrew (macOS/Linux)
+
+```bash
+brew install --cask pavlenkoa/tap/vsg
+```
+
 ### From Source
 
 ```bash

@@ -106,7 +106,7 @@ release:
 
     ### Homebrew (macOS/Linux)
     ```bash
-    brew install pavlenkoa/tap/vsg
+    brew install --cask pavlenkoa/tap/vsg
     ```
 
     ### Binary
