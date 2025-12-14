@@ -293,16 +293,23 @@ func (kv *KVClient) DestroyVersions(ctx context.Context, path string) error {
 			return fmt.Errorf("secret not found: %s", path)
 		}
 
-		// Get current version
-		currentVersion, ok := metadata.Data["current_version"].(float64)
-		if !ok || currentVersion == 0 {
-			return fmt.Errorf("could not determine current version")
+		// Get versions from metadata - this is a map of version numbers to their info
+		versionsMap, ok := metadata.Data["versions"].(map[string]interface{})
+		if !ok || len(versionsMap) == 0 {
+			return fmt.Errorf("no versions found to destroy")
 		}
 
-		// Build list of all versions to destroy
-		versions := make([]int, int(currentVersion))
-		for i := range versions {
-			versions[i] = i + 1
+		// Build list of all version numbers to destroy
+		var versions []int
+		for versionStr := range versionsMap {
+			var v int
+			if _, err := fmt.Sscanf(versionStr, "%d", &v); err == nil {
+				versions = append(versions, v)
+			}
+		}
+
+		if len(versions) == 0 {
+			return fmt.Errorf("no valid versions found to destroy")
 		}
 
 		// Destroy all versions
