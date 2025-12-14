@@ -42,6 +42,18 @@ archives:
       - LICENSE
       - examples/*
 
+brews:
+  - repository:
+      owner: pavlenkoa
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/pavlenkoa/vault-secrets-generator"
+    description: "Vault Secrets Generator - CLI tool for managing secrets in HashiCorp Vault"
+    license: "Apache-2.0"
+    test: |
+      system "#{bin}/vsg", "version"
+
 checksum:
   name_template: "checksums.txt"
 
