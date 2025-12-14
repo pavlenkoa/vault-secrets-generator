@@ -1,7 +1,5 @@
 # VSG - Vault Secrets Generator
 
-> **v2.0 Released:** VSG now uses HCL configuration format (YAML support from v1.x has been removed). See [README.md](README.md) for usage and the migration guide.
-
 ## Project Overview
 
 A lightweight, cloud-agnostic CLI tool that generates and populates secrets in HashiCorp Vault from various sources including remote files (Terraform state, configs), generated passwords, commands, and static values.
@@ -459,9 +457,9 @@ spec:
 
 ## Current Status
 
-**Phase:** v2.0 HCL Migration Complete
+**Version:** v1.0.0
 
-### Completed (v2.0 - HCL)
+### Implemented Features
 - [x] HCL config parsing with custom functions
 - [x] `env()` function for environment variables with CLI `--var` override
 - [x] `generate()`, `json()`, `yaml()`, `raw()`, `vault()`, `command()` functions
@@ -473,7 +471,7 @@ spec:
 - [x] Password generator with configurable policies
 - [x] Local file fetcher
 - [x] S3 fetcher (AWS SDK v2)
-- [x] Vault client (token auth, KV v1/v2)
+- [x] Vault client (token auth, KV v1/v2 auto-detection)
 - [x] Reconciliation engine + dry-run
 - [x] CLI with cobra
 - [x] Helm chart

@@ -421,43 +421,6 @@ helm install vsg ./helm/vault-secrets-generator \
 
 See [helm/vault-secrets-generator/values.yaml](helm/vault-secrets-generator/values.yaml) for all options.
 
-## Migration from v1.x (YAML)
-
-VSG v2.0 uses HCL configuration instead of YAML. Key changes:
-
-| v1.x (YAML) | v2.0 (HCL) |
-|-------------|------------|
-| `secrets:` map | `secret "path" { }` blocks |
-| `source:` + `json:` | `json(url, query)` |
-| `source:` + `yaml:` | `yaml(url, query)` |
-| `generate:` block | `generate()` or `generate({...})` |
-| `command:` | `command(cmd)` |
-| Implicit strategy | Explicit `defaults.strategy` block |
-| No prune | `prune = true/false` per secret |
-| `--permanently` flag | `--hard`, `--full` flags |
-
-Example migration:
-
-**v1.x YAML:**
-```yaml
-secrets:
-  database:
-    path: secret/dev/database
-    data:
-      host:
-        source: s3://bucket/state.tfstate
-        json: .outputs.host.value
-      password: generate
-```
-
-**v2.0 HCL:**
-```hcl
-secret "secret/dev/database" {
-  host     = json("s3://bucket/state.tfstate", ".outputs.host.value")
-  password = generate()
-}
-```
-
 ## Development
 
 ### Running Tests
