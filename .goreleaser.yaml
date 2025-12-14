@@ -28,13 +28,15 @@ builds:
 
 archives:
   - id: default
-    builds:
+    ids:
       - vsg
-    format: tar.gz
+    formats:
+      - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     files:
       - README.md
       - LICENSE
@@ -95,50 +97,24 @@ release:
     ### Binary
     Download the appropriate binary for your platform from the assets below.
 
-dockers:
-  - id: amd64
-    goos: linux
-    goarch: amd64
-    image_templates:
-      - "ghcr.io/pavlenkoa/vault-secrets-generator:{{ .Version }}-amd64"
-      - "ghcr.io/pavlenkoa/vault-secrets-generator:latest-amd64"
+dockers_v2:
+  - id: default
+    ids:
+      - vsg
     dockerfile: Dockerfile.goreleaser
-    use: buildx
-    build_flag_templates:
-      - "--platform=linux/amd64"
-      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=Vault Secrets Generator"
-      - "--label=org.opencontainers.image.url=https://github.com/pavlenkoa/vault-secrets-generator"
-      - "--label=org.opencontainers.image.source=https://github.com/pavlenkoa/vault-secrets-generator"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
-      - "--label=org.opencontainers.image.created={{ .Date }}"
-
-  - id: arm64
-    goos: linux
-    goarch: arm64
-    image_templates:
-      - "ghcr.io/pavlenkoa/vault-secrets-generator:{{ .Version }}-arm64"
-      - "ghcr.io/pavlenkoa/vault-secrets-generator:latest-arm64"
-    dockerfile: Dockerfile.goreleaser
-    use: buildx
-    build_flag_templates:
-      - "--platform=linux/arm64"
-      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=Vault Secrets Generator"
-      - "--label=org.opencontainers.image.url=https://github.com/pavlenkoa/vault-secrets-generator"
-      - "--label=org.opencontainers.image.source=https://github.com/pavlenkoa/vault-secrets-generator"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
-      - "--label=org.opencontainers.image.created={{ .Date }}"
-
-docker_manifests:
-  - name_template: "ghcr.io/pavlenkoa/vault-secrets-generator:{{ .Version }}"
-    image_templates:
-      - "ghcr.io/pavlenkoa/vault-secrets-generator:{{ .Version }}-amd64"
-      - "ghcr.io/pavlenkoa/vault-secrets-generator:{{ .Version }}-arm64"
-
-  - name_template: "ghcr.io/pavlenkoa/vault-secrets-generator:latest"
-    image_templates:
-      - "ghcr.io/pavlenkoa/vault-secrets-generator:latest-amd64"
-      - "ghcr.io/pavlenkoa/vault-secrets-generator:latest-arm64"
+    images:
+      - "ghcr.io/pavlenkoa/vault-secrets-generator"
+    tags:
+      - "{{ .Version }}"
+      - "latest"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      "org.opencontainers.image.title": "{{ .ProjectName }}"
+      "org.opencontainers.image.description": "Vault Secrets Generator"
+      "org.opencontainers.image.url": "https://github.com/pavlenkoa/vault-secrets-generator"
+      "org.opencontainers.image.source": "https://github.com/pavlenkoa/vault-secrets-generator"
+      "org.opencontainers.image.version": "{{ .Version }}"
+      "org.opencontainers.image.revision": "{{ .FullCommit }}"
+      "org.opencontainers.image.created": "{{ .Date }}"
