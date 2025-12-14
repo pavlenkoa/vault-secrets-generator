@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.23-alpine AS build
+FROM golang:1.24-alpine AS build
 
 WORKDIR /app
 
@@ -27,7 +27,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o vsg .
 
 # Final stage
-FROM alpine:3.20
+FROM alpine:3.21
 
 # Install CA certificates for HTTPS connections
 RUN apk add --no-cache ca-certificates tzdata

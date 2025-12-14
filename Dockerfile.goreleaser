@@ -1,5 +1,5 @@
 # Dockerfile for goreleaser - binary is provided
-FROM alpine:3.20
+FROM alpine:3.21
 
 # Install CA certificates for HTTPS connections
 RUN apk add --no-cache ca-certificates tzdata
