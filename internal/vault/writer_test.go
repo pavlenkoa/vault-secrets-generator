@@ -150,8 +150,8 @@ func TestIntegration_KVReadWrite(t *testing.T) {
 		t.Errorf("expected password=testpass123, got %v", data["password"])
 	}
 
-	// Clean up
-	err = kv.Delete(ctx, testPath)
+	// Clean up - use Destroy to fully remove (not just soft delete)
+	err = kv.Destroy(ctx, testPath)
 	if err != nil {
 		t.Logf("warning: failed to delete test secret: %v", err)
 	}
@@ -217,8 +217,8 @@ func TestIntegration_KVPatch(t *testing.T) {
 		t.Errorf("key3 should be value3, got %v", data["key3"])
 	}
 
-	// Clean up
-	kv.Delete(ctx, testPath)
+	// Clean up - use Destroy to fully remove
+	kv.Destroy(ctx, testPath)
 }
 
 func TestIntegration_KVVersionDetection(t *testing.T) {

@@ -136,8 +136,8 @@ func TestIntegration_Reconcile(t *testing.T) {
 		t.Errorf("Expected no changes on second run, got %d adds, %d updates", adds2, updates2)
 	}
 
-	// Clean up
-	err = kv.Delete(ctx, "vsg-integration-test")
+	// Clean up - use Destroy to fully remove (not just soft delete)
+	err = kv.Destroy(ctx, "vsg-integration-test")
 	if err != nil {
 		t.Logf("Warning: failed to clean up test secret: %v", err)
 	}
@@ -207,8 +207,8 @@ func TestIntegration_ReconcileWithForce(t *testing.T) {
 		t.Error("Password did not change with --force")
 	}
 
-	// Clean up
-	kv.Delete(ctx, "vsg-force-test")
+	// Clean up - use Destroy to fully remove
+	kv.Destroy(ctx, "vsg-force-test")
 }
 
 func TestIntegration_ReconcileMultipleBlocks(t *testing.T) {
@@ -256,8 +256,8 @@ func TestIntegration_ReconcileMultipleBlocks(t *testing.T) {
 		t.Errorf("Expected 2 blocks in diff, got %d", len(result.Diff.Blocks))
 	}
 
-	// Clean up
+	// Clean up - use Destroy to fully remove
 	kv, _ := vault.NewKVClient(vaultClient, "kv", vault.KVVersion2)
-	kv.Delete(ctx, "vsg-multi-test-1")
-	kv.Delete(ctx, "vsg-multi-test-2")
+	kv.Destroy(ctx, "vsg-multi-test-1")
+	kv.Destroy(ctx, "vsg-multi-test-2")
 }
