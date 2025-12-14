@@ -34,6 +34,7 @@ func (f *LocalFetcher) Fetch(ctx context.Context, uri string) ([]byte, error) {
 		return nil, err
 	}
 
+	// #nosec G304 -- File path is intentionally user-provided via URI
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading file %s: %w", path, err)

@@ -9,6 +9,7 @@ import (
 // KVVersion represents the KV secrets engine version.
 type KVVersion int
 
+// KVVersion constants define the KV secrets engine versions.
 const (
 	KVVersionAuto KVVersion = 0
 	KVVersion1    KVVersion = 1

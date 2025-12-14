@@ -10,6 +10,7 @@ import (
 // ChangeType represents the type of change.
 type ChangeType string
 
+// ChangeType constants define the types of changes in a diff.
 const (
 	ChangeAdd       ChangeType = "add"
 	ChangeUpdate    ChangeType = "update"

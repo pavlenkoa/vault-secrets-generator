@@ -140,6 +140,7 @@ type SecretBlock struct {
 // ValueType represents the type of a secret value.
 type ValueType string
 
+// ValueType constants define the supported value types.
 const (
 	ValueTypeStatic   ValueType = "static"
 	ValueTypeGenerate ValueType = "generate"

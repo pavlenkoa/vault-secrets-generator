@@ -59,6 +59,7 @@ func (f *S3Fetcher) Fetch(ctx context.Context, uri string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetching s3://%s/%s: %w", bucket, key, err)
 	}
+	//nolint:errcheck // Best effort close on defer
 	defer result.Body.Close()
 
 	data, err := io.ReadAll(result.Body)

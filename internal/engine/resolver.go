@@ -46,6 +46,7 @@ type ResolveResult struct {
 // ValueSource indicates where a value came from.
 type ValueSource string
 
+// ValueSource constants indicate where a value originated from.
 const (
 	SourceStatic    ValueSource = "static"
 	SourceGenerated ValueSource = "generated"

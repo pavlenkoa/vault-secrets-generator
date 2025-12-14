@@ -4,6 +4,7 @@ vsg.exe
 
 # Build output
 dist/
+bin/
 
 # Test coverage
 coverage.out
