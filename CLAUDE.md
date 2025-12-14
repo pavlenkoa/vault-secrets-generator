@@ -469,18 +469,19 @@ spec:
 - [x] CLI `--var` flag for variable override
 - [x] Path-based delete command with `--hard`, `--full`, `--keys` flags
 - [x] Password generator with configurable policies
-- [x] Local file fetcher
-- [x] S3 fetcher (AWS SDK v2)
-- [x] Vault client (token auth, KV v1/v2 auto-detection)
-- [x] Reconciliation engine + dry-run
+- [x] Local file fetcher (tested)
+- [x] S3 fetcher with AWS SDK v2 (tested with json/yaml/raw extraction)
+- [x] Vault client with token auth, KV v1/v2 auto-detection (tested)
+- [x] Reconciliation engine + dry-run (tested)
 - [x] CLI with cobra
 - [x] Helm chart
 - [x] Dockerfile
 - [x] GitHub Actions CI/CD
-- [x] goreleaser configuration
+- [x] goreleaser configuration (v1.0.0 released)
+- [x] Command execution with multiline output (tested)
 
 ### Planned
 - [ ] GCS fetcher
 - [ ] Azure Blob Storage fetcher
-- [ ] Kubernetes auth testing
-- [ ] AppRole auth testing
+- [ ] Kubernetes auth
+- [ ] AppRole auth
