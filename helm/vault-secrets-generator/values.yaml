@@ -1,7 +1,5 @@
 # Default values for vault-secrets-generator
 
-replicaCount: 1
-
 image:
   repository: ghcr.io/pavlenkoa/vault-secrets-generator
   pullPolicy: IfNotPresent
@@ -21,31 +19,14 @@ serviceAccount:
   # If not set and create is true, a name is generated using the fullname template
   name: ""
 
-# CronJob configuration
-cronjob:
-  # Schedule in Cron format
-  schedule: "*/10 * * * *"
-  # Deadline for starting the job (seconds)
-  startingDeadlineSeconds: 60
-  # How to treat concurrent executions
-  concurrencyPolicy: Forbid
-  # Number of successful jobs to keep
-  successfulJobsHistoryLimit: 3
-  # Number of failed jobs to keep
-  failedJobsHistoryLimit: 3
-  # Suspend the cronjob
-  suspend: false
-
-# Initial Job configuration (runs on helm install/upgrade)
-initialJob:
-  # Enable initial job to create secrets immediately
-  enabled: true
+# Job configuration
+job:
+  # Annotations for the Job (e.g., ArgoCD sync waves)
+  annotations: {}
   # How many times to retry on failure
   backoffLimit: 3
   # Delete job after completion (seconds), 0 to keep forever
   ttlSecondsAfterFinished: 300
-  # Hook delete policy: hook-succeeded, hook-failed, before-hook-creation
-  hookDeletePolicy: hook-succeeded
 
 # VSG configuration (HCL format)
 config:
