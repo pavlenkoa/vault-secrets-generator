@@ -15,7 +15,7 @@ func TestComputeDiff_AddNew(t *testing.T) {
 		"key2": SourceGenerated,
 	}
 
-	changes := ComputeDiff(current, desired, sources)
+	changes := ComputeDiff(current, desired, sources, false)
 
 	if len(changes) != 2 {
 		t.Fatalf("expected 2 changes, got %d", len(changes))
@@ -36,10 +36,10 @@ func TestComputeDiff_Update(t *testing.T) {
 		"key1": "new-value",
 	}
 	sources := map[string]ValueSource{
-		"key1": SourceRemote,
+		"key1": SourceJSON,
 	}
 
-	changes := ComputeDiff(current, desired, sources)
+	changes := ComputeDiff(current, desired, sources, false)
 
 	if len(changes) != 1 {
 		t.Fatalf("expected 1 change, got %d", len(changes))
@@ -68,7 +68,7 @@ func TestComputeDiff_Unmanaged(t *testing.T) {
 		"key1": SourceStatic,
 	}
 
-	changes := ComputeDiff(current, desired, sources)
+	changes := ComputeDiff(current, desired, sources, false)
 
 	if len(changes) != 2 {
 		t.Fatalf("expected 2 changes, got %d", len(changes))
@@ -95,6 +95,46 @@ func TestComputeDiff_Unmanaged(t *testing.T) {
 	}
 }
 
+func TestComputeDiff_Prune(t *testing.T) {
+	current := map[string]string{
+		"key1": "value1",
+		"key2": "value2",
+	}
+	desired := map[string]string{
+		"key1": "value1",
+	}
+	sources := map[string]ValueSource{
+		"key1": SourceStatic,
+	}
+
+	// With prune=true, unmanaged keys become deletes
+	changes := ComputeDiff(current, desired, sources, true)
+
+	if len(changes) != 2 {
+		t.Fatalf("expected 2 changes, got %d", len(changes))
+	}
+
+	var deleteCount, noneCount int
+	for _, change := range changes {
+		switch change.Change {
+		case ChangeDelete:
+			deleteCount++
+			if change.Key != "key2" {
+				t.Errorf("expected key2 to be deleted, got %s", change.Key)
+			}
+		case ChangeNone:
+			noneCount++
+		}
+	}
+
+	if deleteCount != 1 {
+		t.Errorf("expected 1 delete, got %d", deleteCount)
+	}
+	if noneCount != 1 {
+		t.Errorf("expected 1 unchanged, got %d", noneCount)
+	}
+}
+
 func TestComputeDiff_NoChange(t *testing.T) {
 	current := map[string]string{
 		"key1": "value1",
@@ -106,7 +146,7 @@ func TestComputeDiff_NoChange(t *testing.T) {
 		"key1": SourceStatic,
 	}
 
-	changes := ComputeDiff(current, desired, sources)
+	changes := ComputeDiff(current, desired, sources, false)
 
 	if len(changes) != 1 {
 		t.Fatalf("expected 1 change, got %d", len(changes))
@@ -137,6 +177,15 @@ func TestDiff_HasChanges(t *testing.T) {
 			diff: &Diff{
 				Blocks: []BlockDiff{
 					{Changes: []SecretChange{{Change: ChangeUpdate}}},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "has delete",
+			diff: &Diff{
+				Blocks: []BlockDiff{
+					{Changes: []SecretChange{{Change: ChangeDelete}}},
 				},
 			},
 			expected: true,
@@ -184,6 +233,7 @@ func TestDiff_Summary(t *testing.T) {
 					{Change: ChangeAdd},
 					{Change: ChangeAdd},
 					{Change: ChangeUpdate},
+					{Change: ChangeDelete},
 					{Change: ChangeUnmanaged},
 					{Change: ChangeNone},
 					{Change: ChangeNone},
@@ -192,13 +242,16 @@ func TestDiff_Summary(t *testing.T) {
 		},
 	}
 
-	adds, updates, unmanaged, unchanged := diff.Summary()
+	adds, updates, deletes, unmanaged, unchanged := diff.Summary()
 
 	if adds != 2 {
 		t.Errorf("expected 2 adds, got %d", adds)
 	}
 	if updates != 1 {
 		t.Errorf("expected 1 update, got %d", updates)
+	}
+	if deletes != 1 {
+		t.Errorf("expected 1 delete, got %d", deletes)
 	}
 	if unmanaged != 1 {
 		t.Errorf("expected 1 unmanaged, got %d", unmanaged)
@@ -240,7 +293,8 @@ func TestFormatDiff(t *testing.T) {
 				Path: "kv/prod",
 				Changes: []SecretChange{
 					{Key: "db/password", Change: ChangeAdd, NewMasked: "se****23", Source: SourceGenerated},
-					{Key: "db/host", Change: ChangeUpdate, OldMasked: "ol****ue", NewMasked: "ne****ue", Source: SourceRemote},
+					{Key: "db/host", Change: ChangeUpdate, OldMasked: "ol****ue", NewMasked: "ne****ue", Source: SourceJSON},
+					{Key: "old_key", Change: ChangeDelete, OldMasked: "de****ed"},
 				},
 			},
 		},
@@ -264,6 +318,9 @@ func TestFormatDiff(t *testing.T) {
 	}
 	if !contains(output, "~ db/host") {
 		t.Error("expected output to contain update marker")
+	}
+	if !contains(output, "- old_key") {
+		t.Error("expected output to contain delete marker")
 	}
 }
 

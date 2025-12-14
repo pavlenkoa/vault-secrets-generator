@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
+	"github.com/pavlenkoa/vault-secrets-generator/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -22,6 +24,7 @@ var (
 	// Global flags
 	configFile string
 	verbose    bool
+	cliVars    []string
 
 	// Logger
 	logger *slog.Logger
@@ -32,10 +35,10 @@ var rootCmd = &cobra.Command{
 	Use:   "vsg",
 	Short: "Vault Secrets Generator",
 	Long: `VSG is a CLI tool that generates and populates secrets in HashiCorp Vault
-from various sources including Terraform state files, generated passwords,
-and static values.
+from various sources including remote files (Terraform state, configs),
+generated passwords, commands, and static values.
 
-Use declarative YAML configuration for GitOps workflows.`,
+Use declarative HCL configuration for GitOps workflows.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
@@ -65,6 +68,19 @@ func Execute() {
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "config file path (or set VSG_CONFIG)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+	rootCmd.PersistentFlags().StringArrayVar(&cliVars, "var", nil, "set variable KEY=VALUE (can be repeated)")
+}
+
+// parseVars converts --var flags to a Variables map.
+// CLI vars take priority over environment variables.
+func parseVars() config.Variables {
+	vars := make(config.Variables)
+	for _, v := range cliVars {
+		if parts := strings.SplitN(v, "=", 2); len(parts) == 2 {
+			vars[parts[0]] = parts[1]
+		}
+	}
+	return vars
 }
 
 // getConfigFile returns the config file path from flag or environment

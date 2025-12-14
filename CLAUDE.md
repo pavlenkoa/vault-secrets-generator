@@ -1,6 +1,6 @@
 # VSG - Vault Secrets Generator
 
-> **⚠️ Migration Notice:** This project is migrating from YAML (v1.x) to HCL (v2.0) configuration format. The specification below describes the target HCL format. See [Current Status](#current-status) for migration progress.
+> **v2.0 Released:** VSG now uses HCL configuration format (YAML support from v1.x has been removed). See [README.md](README.md) for usage and the migration guide.
 
 ## Project Overview
 
@@ -456,10 +456,17 @@ spec:
 
 ## Current Status
 
-**Phase:** Migration from YAML to HCL config
+**Phase:** v2.0 HCL Migration Complete
 
-### Completed (YAML version - v1.x)
-- [x] Config parsing (YAML)
+### Completed (v2.0 - HCL)
+- [x] HCL config parsing with custom functions
+- [x] `env()` function for environment variables with CLI `--var` override
+- [x] `generate()`, `json()`, `yaml()`, `raw()`, `vault()`, `command()` functions
+- [x] Strategy system (`create` vs `update`) per value type
+- [x] Per-key strategy override via object literal syntax
+- [x] Prune logic per secret block
+- [x] CLI `--var` flag for variable override
+- [x] Path-based delete command with `--hard`, `--full`, `--keys` flags
 - [x] Password generator with configurable policies
 - [x] Local file fetcher
 - [x] S3 fetcher (AWS SDK v2)
@@ -470,17 +477,6 @@ spec:
 - [x] Dockerfile
 - [x] GitHub Actions CI/CD
 - [x] goreleaser configuration
-
-### In Progress (v2.0 - HCL Migration)
-- [ ] **HCL Migration**: Migrate config format from YAML to HCL
-  - [ ] New HCL parser with custom functions
-  - [ ] `env()` function for environment variables
-  - [ ] `generate()`, `json()`, `yaml()`, `raw()`, `vault()`, `command()` functions
-  - [ ] Strategy system (`create` vs `update`) per value type
-  - [ ] Per-key strategy override
-  - [ ] Prune logic per secret block
-  - [ ] Update CLI for `--var` flag
-  - [ ] Delete command with `--hard` and `--full` flags
 
 ### Planned
 - [ ] GCS fetcher

@@ -238,3 +238,91 @@ func (kv *KVClient) Version() KVVersion {
 func (kv *KVClient) Mount() string {
 	return kv.mount
 }
+
+// DeleteKeys removes specific keys from a secret by writing a new version without them.
+func (kv *KVClient) DeleteKeys(ctx context.Context, path string, keys []string) error {
+	// Read current secret
+	current, err := kv.Read(ctx, path)
+	if err != nil {
+		return fmt.Errorf("reading current secret: %w", err)
+	}
+	if current == nil {
+		return fmt.Errorf("secret not found: %s", path)
+	}
+
+	// Check if any keys exist
+	keysFound := false
+	for _, key := range keys {
+		if _, ok := current[key]; ok {
+			keysFound = true
+			break
+		}
+	}
+	if !keysFound {
+		return fmt.Errorf("none of the specified keys found in secret")
+	}
+
+	// Remove specified keys
+	for _, key := range keys {
+		delete(current, key)
+	}
+
+	// If no keys left, delete the entire secret
+	if len(current) == 0 {
+		return kv.Delete(ctx, path)
+	}
+
+	// Write back without the deleted keys
+	return kv.Write(ctx, path, current)
+}
+
+// DestroyVersions destroys all version data but keeps metadata (KV v2 only).
+// For KV v1, this is equivalent to Delete (all deletes are permanent).
+func (kv *KVClient) DestroyVersions(ctx context.Context, path string) error {
+	path = strings.TrimPrefix(path, "/")
+
+	if kv.version == KVVersion2 {
+		// For v2, use the destroy endpoint to destroy all versions
+		// First, get all versions from metadata
+		metadataPath := fmt.Sprintf("%s/metadata/%s", kv.mount, path)
+		metadata, err := kv.client.Logical().Read(metadataPath)
+		if err != nil {
+			return fmt.Errorf("reading metadata: %w", err)
+		}
+		if metadata == nil {
+			return fmt.Errorf("secret not found: %s", path)
+		}
+
+		// Get current version
+		currentVersion, ok := metadata.Data["current_version"].(float64)
+		if !ok || currentVersion == 0 {
+			return fmt.Errorf("could not determine current version")
+		}
+
+		// Build list of all versions to destroy
+		versions := make([]int, int(currentVersion))
+		for i := range versions {
+			versions[i] = i + 1
+		}
+
+		// Destroy all versions
+		destroyPath := fmt.Sprintf("%s/destroy/%s", kv.mount, path)
+		_, err = kv.client.Logical().Write(destroyPath, map[string]interface{}{
+			"versions": versions,
+		})
+		if err != nil {
+			return fmt.Errorf("destroying versions: %w", err)
+		}
+
+		return nil
+	}
+
+	// For v1, regular delete is permanent
+	return kv.Delete(ctx, path)
+}
+
+// DestroyMetadata permanently removes all versions and metadata (KV v2 only).
+// This is an alias for Destroy() for clarity.
+func (kv *KVClient) DestroyMetadata(ctx context.Context, path string) error {
+	return kv.Destroy(ctx, path)
+}

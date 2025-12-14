@@ -11,7 +11,8 @@ import (
 func TestResolver_ResolveStatic(t *testing.T) {
 	registry := fetcher.NewRegistry()
 	defaults := config.DefaultPasswordPolicy()
-	resolver := NewResolver(registry, defaults)
+	strategies := config.DefaultStrategyDefaults()
+	resolver := NewResolver(registry, nil, defaults, strategies)
 
 	ctx := context.Background()
 
@@ -31,15 +32,13 @@ func TestResolver_ResolveStatic(t *testing.T) {
 	if result.Source != SourceStatic {
 		t.Errorf("expected SourceStatic, got %s", result.Source)
 	}
-	if result.IsGenerated {
-		t.Error("expected IsGenerated to be false")
-	}
 }
 
 func TestResolver_ResolveGenerate(t *testing.T) {
 	registry := fetcher.NewRegistry()
 	defaults := config.DefaultPasswordPolicy()
-	resolver := NewResolver(registry, defaults)
+	strategies := config.DefaultStrategyDefaults()
+	resolver := NewResolver(registry, nil, defaults, strategies)
 
 	ctx := context.Background()
 
@@ -58,15 +57,13 @@ func TestResolver_ResolveGenerate(t *testing.T) {
 	if result.Source != SourceGenerated {
 		t.Errorf("expected SourceGenerated, got %s", result.Source)
 	}
-	if !result.IsGenerated {
-		t.Error("expected IsGenerated to be true")
-	}
 }
 
 func TestResolver_ResolveGenerateWithParams(t *testing.T) {
 	registry := fetcher.NewRegistry()
 	defaults := config.DefaultPasswordPolicy()
-	resolver := NewResolver(registry, defaults)
+	strategies := config.DefaultStrategyDefaults()
+	resolver := NewResolver(registry, nil, defaults, strategies)
 
 	ctx := context.Background()
 
@@ -91,7 +88,8 @@ func TestResolver_ResolveGenerateWithParams(t *testing.T) {
 func TestResolver_ResolveGenerateExistingNoForce(t *testing.T) {
 	registry := fetcher.NewRegistry()
 	defaults := config.DefaultPasswordPolicy()
-	resolver := NewResolver(registry, defaults)
+	strategies := config.DefaultStrategyDefaults()
+	resolver := NewResolver(registry, nil, defaults, strategies)
 
 	ctx := context.Background()
 
@@ -99,7 +97,7 @@ func TestResolver_ResolveGenerateExistingNoForce(t *testing.T) {
 		Type: config.ValueTypeGenerate,
 	}
 
-	// With existing value and no force, should keep existing
+	// With existing value and no force, should keep existing (default strategy is "create")
 	result, err := resolver.Resolve(ctx, val, "existing-password", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -116,7 +114,8 @@ func TestResolver_ResolveGenerateExistingNoForce(t *testing.T) {
 func TestResolver_ResolveGenerateExistingWithForce(t *testing.T) {
 	registry := fetcher.NewRegistry()
 	defaults := config.DefaultPasswordPolicy()
-	resolver := NewResolver(registry, defaults)
+	strategies := config.DefaultStrategyDefaults()
+	resolver := NewResolver(registry, nil, defaults, strategies)
 
 	ctx := context.Background()
 
@@ -138,10 +137,11 @@ func TestResolver_ResolveGenerateExistingWithForce(t *testing.T) {
 	}
 }
 
-func TestResolver_ResolveSource(t *testing.T) {
+func TestResolver_ResolveJSON(t *testing.T) {
 	registry := fetcher.NewRegistry()
 	defaults := config.DefaultPasswordPolicy()
-	resolver := NewResolver(registry, defaults)
+	strategies := config.DefaultStrategyDefaults()
+	resolver := NewResolver(registry, nil, defaults, strategies)
 
 	// Add a mock fetcher
 	mockData := []byte(`{
@@ -163,9 +163,9 @@ func TestResolver_ResolveSource(t *testing.T) {
 	ctx := context.Background()
 
 	val := config.Value{
-		Type:     config.ValueTypeSource,
-		Source:   "s3://bucket/state.tfstate",
-		JSONPath: ".outputs.endpoint.value",
+		Type:  config.ValueTypeJSON,
+		URL:   "s3://bucket/state.tfstate",
+		Query: ".outputs.endpoint.value",
 	}
 
 	result, err := resolver.Resolve(ctx, val, "", false)
@@ -176,15 +176,16 @@ func TestResolver_ResolveSource(t *testing.T) {
 	if result.Value != "db.example.com" {
 		t.Errorf("expected 'db.example.com', got %q", result.Value)
 	}
-	if result.Source != SourceRemote {
-		t.Errorf("expected SourceRemote, got %s", result.Source)
+	if result.Source != SourceJSON {
+		t.Errorf("expected SourceJSON, got %s", result.Source)
 	}
 }
 
-func TestResolver_ResolveSourceCaching(t *testing.T) {
+func TestResolver_ResolveJSONCaching(t *testing.T) {
 	registry := fetcher.NewRegistry()
 	defaults := config.DefaultPasswordPolicy()
-	resolver := NewResolver(registry, defaults)
+	strategies := config.DefaultStrategyDefaults()
+	resolver := NewResolver(registry, nil, defaults, strategies)
 
 	fetchCount := 0
 	mockData := []byte(`{
@@ -207,14 +208,14 @@ func TestResolver_ResolveSourceCaching(t *testing.T) {
 	ctx := context.Background()
 
 	val1 := config.Value{
-		Type:     config.ValueTypeSource,
-		Source:   "s3://bucket/state.tfstate",
-		JSONPath: ".outputs.value1.value",
+		Type:  config.ValueTypeJSON,
+		URL:   "s3://bucket/state.tfstate",
+		Query: ".outputs.value1.value",
 	}
 	val2 := config.Value{
-		Type:     config.ValueTypeSource,
-		Source:   "s3://bucket/state.tfstate",
-		JSONPath: ".outputs.value2.value",
+		Type:  config.ValueTypeJSON,
+		URL:   "s3://bucket/state.tfstate",
+		Query: ".outputs.value2.value",
 	}
 
 	// Resolve two values from the same source file
@@ -237,7 +238,8 @@ func TestResolver_ResolveSourceCaching(t *testing.T) {
 func TestResolver_ResolveCommand(t *testing.T) {
 	registry := fetcher.NewRegistry()
 	defaults := config.DefaultPasswordPolicy()
-	resolver := NewResolver(registry, defaults)
+	strategies := config.DefaultStrategyDefaults()
+	resolver := NewResolver(registry, nil, defaults, strategies)
 
 	ctx := context.Background()
 
@@ -256,6 +258,34 @@ func TestResolver_ResolveCommand(t *testing.T) {
 	}
 	if result.Source != SourceCommand {
 		t.Errorf("expected SourceCommand, got %s", result.Source)
+	}
+}
+
+func TestResolver_ResolveGenerateWithUpdateStrategy(t *testing.T) {
+	registry := fetcher.NewRegistry()
+	defaults := config.DefaultPasswordPolicy()
+	strategies := config.DefaultStrategyDefaults()
+	resolver := NewResolver(registry, nil, defaults, strategies)
+
+	ctx := context.Background()
+
+	// Set strategy to update - should regenerate even with existing value
+	val := config.Value{
+		Type:     config.ValueTypeGenerate,
+		Strategy: config.StrategyUpdate,
+	}
+
+	result, err := resolver.Resolve(ctx, val, "existing-password", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// With update strategy, should generate new value
+	if result.Value == "existing-password" {
+		t.Error("expected new generated value with update strategy, got existing")
+	}
+	if result.Source != SourceGenerated {
+		t.Errorf("expected SourceGenerated, got %s", result.Source)
 	}
 }
 

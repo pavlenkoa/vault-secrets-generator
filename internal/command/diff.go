@@ -21,10 +21,13 @@ defined in the configuration file and shows what changes would be made.
 
 This is equivalent to 'apply --dry-run' but with more output options.`,
 	Example: `  # Show diff in text format
-  vsg diff --config config.yaml
+  vsg diff --config config.hcl
+
+  # Show diff with variable override
+  vsg diff --config config.hcl --var ENV=prod
 
   # Show diff in JSON format
-  vsg diff --config config.yaml --output json`,
+  vsg diff --config config.hcl --output json`,
 	RunE: runDiff,
 }
 
@@ -46,7 +49,8 @@ func runDiff(cmd *cobra.Command, args []string) error {
 
 	log.Debug("loading config", "path", cfgPath)
 
-	cfg, err := config.Load(cfgPath)
+	vars := parseVars()
+	cfg, err := config.Load(cfgPath, vars)
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
@@ -70,7 +74,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	registry := setupFetchers(ctx)
 
 	// Create engine
-	eng := engine.NewEngine(vaultClient, registry, cfg.Defaults.Generate, log)
+	eng := engine.NewEngine(vaultClient, registry, cfg.Defaults, log)
 
 	// Run plan (dry-run)
 	opts := engine.Options{

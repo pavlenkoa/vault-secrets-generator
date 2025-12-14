@@ -4,28 +4,30 @@ import (
 	"testing"
 )
 
-func TestParse_ValidConfig(t *testing.T) {
-	yaml := `
-vault:
-  address: https://vault.example.com
-  auth:
-    method: token
+func TestParseHCL_ValidConfig(t *testing.T) {
+	hcl := `
+vault {
+  address = "https://vault.example.com"
+  auth {
+    method = "token"
+  }
+}
 
-defaults:
-  generate:
-    length: 32
-    digits: 5
-    symbols: 5
+defaults {
+  generate {
+    length  = 32
+    digits  = 5
+    symbols = 5
+  }
+}
 
-secrets:
-  main:
-    path: secret/dev
-    data:
-      api_key: generate
-      db_port: "5432"
+secret "secret/dev" {
+  api_key = generate()
+  db_port = "5432"
+}
 `
 
-	cfg, err := Parse([]byte(yaml))
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -34,9 +36,13 @@ secrets:
 		t.Errorf("unexpected vault address: %s", cfg.Vault.Address)
 	}
 
-	block, ok := cfg.Secrets["main"]
+	if len(cfg.Secrets) != 1 {
+		t.Fatalf("expected 1 secret block, got %d", len(cfg.Secrets))
+	}
+
+	block, ok := cfg.Secrets["secret/dev"]
 	if !ok {
-		t.Fatal("missing 'main' secret block")
+		t.Fatal("missing secret block for path 'secret/dev'")
 	}
 	if block.Path != "secret/dev" {
 		t.Errorf("expected path=secret/dev, got %s", block.Path)
@@ -54,24 +60,19 @@ secrets:
 	}
 }
 
-func TestParse_GenerateWithCustomPolicy(t *testing.T) {
-	yaml := `
-secrets:
-  test:
-    path: secret/test
-    data:
-      jwt_secret:
-        generate:
-          length: 64
-          symbols: 0
+func TestParseHCL_GenerateWithCustomPolicy(t *testing.T) {
+	hcl := `
+secret "secret/test" {
+  jwt_secret = generate({length = 64, symbols = 0})
+}
 `
 
-	cfg, err := Parse([]byte(yaml))
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	val := cfg.Secrets["test"].Data["jwt_secret"]
+	val := cfg.Secrets["secret/test"].Data["jwt_secret"]
 	if val.Type != ValueTypeGenerate {
 		t.Errorf("expected generate type, got %s", val.Type)
 	}
@@ -86,112 +87,212 @@ secrets:
 	}
 }
 
-func TestParse_SourceWithJSON(t *testing.T) {
-	yaml := `
-secrets:
-  test:
-    path: secret/test
-    data:
-      db_host:
-        source: s3://bucket/terraform.tfstate
-        json: .outputs.db_host.value
+func TestParseHCL_JSONFunction(t *testing.T) {
+	hcl := `
+secret "secret/test" {
+  db_host = json("s3://bucket/terraform.tfstate", ".outputs.db_host.value")
+}
 `
 
-	cfg, err := Parse([]byte(yaml))
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	val := cfg.Secrets["test"].Data["db_host"]
-	if val.Type != ValueTypeSource {
-		t.Errorf("expected source type, got %s", val.Type)
+	val := cfg.Secrets["secret/test"].Data["db_host"]
+	if val.Type != ValueTypeJSON {
+		t.Errorf("expected json type, got %s", val.Type)
 	}
-	if val.Source != "s3://bucket/terraform.tfstate" {
-		t.Errorf("unexpected source: %s", val.Source)
+	if val.URL != "s3://bucket/terraform.tfstate" {
+		t.Errorf("unexpected url: %s", val.URL)
 	}
-	if val.JSONPath != ".outputs.db_host.value" {
-		t.Errorf("unexpected json path: %s", val.JSONPath)
+	if val.Query != ".outputs.db_host.value" {
+		t.Errorf("unexpected query: %s", val.Query)
 	}
 }
 
-func TestParse_SourceWithYAML(t *testing.T) {
-	yaml := `
-secrets:
-  test:
-    path: secret/test
-    data:
-      config_value:
-        source: file:///path/to/config.yaml
-        yaml: .database.host
+func TestParseHCL_YAMLFunction(t *testing.T) {
+	hcl := `
+secret "secret/test" {
+  config_value = yaml("file:///path/to/config.yaml", ".database.host")
+}
 `
 
-	cfg, err := Parse([]byte(yaml))
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	val := cfg.Secrets["test"].Data["config_value"]
-	if val.Type != ValueTypeSource {
-		t.Errorf("expected source type, got %s", val.Type)
+	val := cfg.Secrets["secret/test"].Data["config_value"]
+	if val.Type != ValueTypeYAML {
+		t.Errorf("expected yaml type, got %s", val.Type)
 	}
-	if val.Source != "file:///path/to/config.yaml" {
-		t.Errorf("unexpected source: %s", val.Source)
+	if val.URL != "file:///path/to/config.yaml" {
+		t.Errorf("unexpected url: %s", val.URL)
 	}
-	if val.YAMLPath != ".database.host" {
-		t.Errorf("unexpected yaml path: %s", val.YAMLPath)
+	if val.Query != ".database.host" {
+		t.Errorf("unexpected query: %s", val.Query)
 	}
 }
 
-func TestParse_Command(t *testing.T) {
-	yaml := `
-secrets:
-  test:
-    path: secret/test
-    data:
-      hash:
-        command: caddy hash-password --plaintext "mypassword"
+func TestParseHCL_RawFunction(t *testing.T) {
+	hcl := `
+secret "secret/test" {
+  ssh_key = raw("s3://bucket/key.pem")
+}
 `
 
-	cfg, err := Parse([]byte(yaml))
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	val := cfg.Secrets["test"].Data["hash"]
+	val := cfg.Secrets["secret/test"].Data["ssh_key"]
+	if val.Type != ValueTypeRaw {
+		t.Errorf("expected raw type, got %s", val.Type)
+	}
+	if val.URL != "s3://bucket/key.pem" {
+		t.Errorf("unexpected url: %s", val.URL)
+	}
+}
+
+func TestParseHCL_VaultFunction(t *testing.T) {
+	hcl := `
+secret "secret/test" {
+  shared_key = vault("secret/shared", "api_key")
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val := cfg.Secrets["secret/test"].Data["shared_key"]
+	if val.Type != ValueTypeVault {
+		t.Errorf("expected vault type, got %s", val.Type)
+	}
+	if val.VaultPath != "secret/shared" {
+		t.Errorf("unexpected vault path: %s", val.VaultPath)
+	}
+	if val.VaultKey != "api_key" {
+		t.Errorf("unexpected vault key: %s", val.VaultKey)
+	}
+}
+
+func TestParseHCL_Command(t *testing.T) {
+	hcl := `
+secret "secret/test" {
+  hash = command("caddy hash-password --plaintext mypassword")
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val := cfg.Secrets["secret/test"].Data["hash"]
 	if val.Type != ValueTypeCommand {
 		t.Errorf("expected command type, got %s", val.Type)
 	}
-	if val.Command != `caddy hash-password --plaintext "mypassword"` {
+	if val.Command != `caddy hash-password --plaintext mypassword` {
 		t.Errorf("unexpected command: %s", val.Command)
 	}
 }
 
-func TestParse_SourceMissingPath(t *testing.T) {
-	yaml := `
-secrets:
-  test:
-    path: secret/test
-    data:
-      db_host:
-        source: s3://bucket/terraform.tfstate
+func TestParseHCL_EnvFunction(t *testing.T) {
+	// Note: HCL template interpolation uses ${} syntax
+	hcl := `
+secret "secret/prod/app" {
+  region = env("REGION")
+}
 `
 
-	_, err := Parse([]byte(yaml))
-	if err == nil {
-		t.Fatal("expected error for source without json/yaml path")
+	vars := Variables{
+		"REGION": "us-east-1",
+	}
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", vars)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	block, ok := cfg.Secrets["secret/prod/app"]
+	if !ok {
+		t.Fatalf("missing secret block for path 'secret/prod/app', got keys: %v", keys(cfg.Secrets))
+	}
+	if block.Path != "secret/prod/app" {
+		t.Errorf("expected path=secret/prod/app, got %s", block.Path)
+	}
+
+	val := block.Data["region"]
+	if val.Type != ValueTypeStatic {
+		t.Errorf("expected static type for env(), got %s", val.Type)
+	}
+	if val.Static != "us-east-1" {
+		t.Errorf("expected region=us-east-1, got %s", val.Static)
 	}
 }
 
-func TestParse_DefaultValues(t *testing.T) {
-	yaml := `
-secrets:
-  test:
-    path: secret/test
-    data:
-      key: generate
+func keys(m map[string]SecretBlock) []string {
+	result := make([]string, 0, len(m))
+	for k := range m {
+		result = append(result, k)
+	}
+	return result
+}
+
+func TestParseHCL_StrategyOverride(t *testing.T) {
+	hcl := `
+secret "secret/test" {
+  password = generate({strategy = "update"})
+  db_host  = json("s3://bucket/state", ".db", {strategy = "create"})
+}
 `
 
-	cfg, err := Parse([]byte(yaml))
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	pass := cfg.Secrets["secret/test"].Data["password"]
+	if pass.Strategy != StrategyUpdate {
+		t.Errorf("expected password strategy=update, got %s", pass.Strategy)
+	}
+
+	dbHost := cfg.Secrets["secret/test"].Data["db_host"]
+	if dbHost.Strategy != StrategyCreate {
+		t.Errorf("expected db_host strategy=create, got %s", dbHost.Strategy)
+	}
+}
+
+func TestParseHCL_Prune(t *testing.T) {
+	hcl := `
+secret "secret/test" {
+  prune = true
+  key   = "value"
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !cfg.Secrets["secret/test"].Prune {
+		t.Error("expected prune=true")
+	}
+}
+
+func TestParseHCL_DefaultValues(t *testing.T) {
+	hcl := `
+secret "secret/test" {
+  key = generate()
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -208,110 +309,97 @@ secrets:
 	if cfg.Defaults.Generate.SymbolCharacters != "-_$@" {
 		t.Errorf("expected default symbolCharacters=-_$@, got %s", cfg.Defaults.Generate.SymbolCharacters)
 	}
-	if cfg.Defaults.Generate.AllowRepeat == nil || !*cfg.Defaults.Generate.AllowRepeat {
-		t.Error("expected default allowRepeat=true")
+}
+
+func TestParseHCL_DefaultStrategies(t *testing.T) {
+	hcl := `
+defaults {
+  strategy {
+    generate = "update"
+    json     = "create"
+  }
+}
+
+secret "secret/test" {
+  key = generate()
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.Defaults.Strategy.Generate != StrategyUpdate {
+		t.Errorf("expected default generate strategy=update, got %s", cfg.Defaults.Strategy.Generate)
+	}
+	if cfg.Defaults.Strategy.JSON != StrategyCreate {
+		t.Errorf("expected default json strategy=create, got %s", cfg.Defaults.Strategy.JSON)
 	}
 }
 
-func TestParse_NoSecrets(t *testing.T) {
-	yaml := `
-vault:
-  address: https://vault.example.com
+func TestParseHCL_NoSecrets(t *testing.T) {
+	hcl := `
+vault {
+  address = "https://vault.example.com"
+}
 `
 
-	_, err := Parse([]byte(yaml))
+	_, err := ParseHCL([]byte(hcl), "test.hcl", nil)
 	if err == nil {
 		t.Fatal("expected error for missing secrets")
 	}
 }
 
-func TestParse_EmptyPath(t *testing.T) {
-	yaml := `
-secrets:
-  test:
-    data:
-      key: "value"
+func TestParseHCL_InvalidHCL(t *testing.T) {
+	hcl := `
+not valid hcl here {{{
 `
 
-	_, err := Parse([]byte(yaml))
+	_, err := ParseHCL([]byte(hcl), "test.hcl", nil)
 	if err == nil {
-		t.Fatal("expected error for empty path")
+		t.Fatal("expected error for invalid HCL")
 	}
 }
 
-func TestParse_EmptyData(t *testing.T) {
-	yaml := `
-secrets:
-  test:
-    path: secret/test
-`
-
-	_, err := Parse([]byte(yaml))
-	if err == nil {
-		t.Fatal("expected error for empty data")
-	}
+func TestParseHCL_LengthTooSmall(t *testing.T) {
+	hcl := `
+defaults {
+  generate {
+    length  = 5
+    digits  = 5
+    symbols = 5
+  }
 }
 
-func TestParse_InvalidVersion(t *testing.T) {
-	yaml := `
-secrets:
-  test:
-    path: secret/test
-    version: 3
-    data:
-      key: "value"
-`
-
-	_, err := Parse([]byte(yaml))
-	if err == nil {
-		t.Fatal("expected error for invalid version")
-	}
+secret "secret/test" {
+  key = generate()
 }
-
-func TestParse_InvalidYAML(t *testing.T) {
-	yaml := `
-not: valid: yaml: here
 `
 
-	_, err := Parse([]byte(yaml))
-	if err == nil {
-		t.Fatal("expected error for invalid yaml")
-	}
-}
-
-func TestParse_LengthTooSmall(t *testing.T) {
-	yaml := `
-defaults:
-  generate:
-    length: 5
-    digits: 5
-    symbols: 5
-
-secrets:
-  test:
-    path: secret/test
-    data:
-      key: generate
-`
-
-	_, err := Parse([]byte(yaml))
+	_, err := ParseHCL([]byte(hcl), "test.hcl", nil)
 	if err == nil {
 		t.Fatal("expected error for length too small")
 	}
 }
 
-func TestParse_InvalidValueFormat(t *testing.T) {
-	yaml := `
-secrets:
-  test:
-    path: secret/test
-    data:
-      key:
-        unknown_key: "value"
+func TestParseHCL_MultipleSecrets(t *testing.T) {
+	hcl := `
+secret "secret/app1" {
+  key = "value1"
+}
+
+secret "secret/app2" {
+  key = "value2"
+}
 `
 
-	_, err := Parse([]byte(yaml))
-	if err == nil {
-		t.Fatal("expected error for invalid value format")
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.Secrets) != 2 {
+		t.Errorf("expected 2 secret blocks, got %d", len(cfg.Secrets))
 	}
 }

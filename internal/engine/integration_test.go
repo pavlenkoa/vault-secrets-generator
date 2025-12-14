@@ -39,14 +39,17 @@ func TestIntegration_Reconcile(t *testing.T) {
 	registry := fetcher.NewRegistry()
 	registry.Register(fetcher.NewLocalFetcher())
 
-	// Create engine
-	defaults := config.DefaultPasswordPolicy()
+	// Create engine with config.Defaults
+	defaults := config.Defaults{
+		Strategy: config.DefaultStrategyDefaults(),
+		Generate: config.DefaultPasswordPolicy(),
+	}
 	engine := NewEngine(vaultClient, registry, defaults, nil)
 
 	// Create test config
 	cfg := &config.Config{
 		Secrets: map[string]config.SecretBlock{
-			"test": {
+			"kv/vsg-integration-test": {
 				Path: "kv/vsg-integration-test",
 				Data: map[string]config.Value{
 					"static_value": {
@@ -79,8 +82,8 @@ func TestIntegration_Reconcile(t *testing.T) {
 		t.Log("No changes detected (secrets may already exist)")
 	}
 
-	adds, updates, unmanaged, _ := result.Diff.Summary()
-	t.Logf("Plan: %d adds, %d updates, %d unmanaged", adds, updates, unmanaged)
+	adds, updates, deletes, unmanaged, _ := result.Diff.Summary()
+	t.Logf("Plan: %d adds, %d updates, %d deletes, %d unmanaged", adds, updates, deletes, unmanaged)
 
 	// Now apply
 	result, err = engine.Reconcile(ctx, cfg, Options{})
@@ -128,7 +131,7 @@ func TestIntegration_Reconcile(t *testing.T) {
 		t.Fatalf("Second Plan failed: %v", err)
 	}
 
-	adds2, updates2, _, _ := result2.Diff.Summary()
+	adds2, updates2, _, _, _ := result2.Diff.Summary()
 	if adds2 != 0 || updates2 != 0 {
 		t.Errorf("Expected no changes on second run, got %d adds, %d updates", adds2, updates2)
 	}
@@ -145,12 +148,15 @@ func TestIntegration_ReconcileWithForce(t *testing.T) {
 	ctx := context.Background()
 
 	registry := fetcher.NewRegistry()
-	defaults := config.DefaultPasswordPolicy()
+	defaults := config.Defaults{
+		Strategy: config.DefaultStrategyDefaults(),
+		Generate: config.DefaultPasswordPolicy(),
+	}
 	engine := NewEngine(vaultClient, registry, defaults, nil)
 
 	cfg := &config.Config{
 		Secrets: map[string]config.SecretBlock{
-			"test": {
+			"kv/vsg-force-test": {
 				Path: "kv/vsg-force-test",
 				Data: map[string]config.Value{
 					"password": {
@@ -210,12 +216,15 @@ func TestIntegration_ReconcileMultipleBlocks(t *testing.T) {
 	ctx := context.Background()
 
 	registry := fetcher.NewRegistry()
-	defaults := config.DefaultPasswordPolicy()
+	defaults := config.Defaults{
+		Strategy: config.DefaultStrategyDefaults(),
+		Generate: config.DefaultPasswordPolicy(),
+	}
 	engine := NewEngine(vaultClient, registry, defaults, nil)
 
 	cfg := &config.Config{
 		Secrets: map[string]config.SecretBlock{
-			"block1": {
+			"kv/vsg-multi-test-1": {
 				Path: "kv/vsg-multi-test-1",
 				Data: map[string]config.Value{
 					"key": {
@@ -224,7 +233,7 @@ func TestIntegration_ReconcileMultipleBlocks(t *testing.T) {
 					},
 				},
 			},
-			"block2": {
+			"kv/vsg-multi-test-2": {
 				Path: "kv/vsg-multi-test-2",
 				Data: map[string]config.Value{
 					"key": {

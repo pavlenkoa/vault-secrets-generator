@@ -8,120 +8,155 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/pavlenkoa/vault-secrets-generator/internal/config"
 	"github.com/pavlenkoa/vault-secrets-generator/internal/vault"
 )
 
 var (
-	deleteAll         bool
-	deleteForce       bool
-	deletePermanently bool
+	deleteForce bool
+	deleteHard  bool
+	deleteFull  bool
+	deleteKeys  string
 )
 
 var deleteCmd = &cobra.Command{
-	Use:   "delete [block-name]",
+	Use:   "delete <path>",
 	Short: "Delete secrets from Vault",
-	Long: `Delete removes secrets from Vault that are defined in the configuration.
+	Long: `Delete removes secrets from Vault at the specified path.
 
-If a block name is provided, only that block's secrets are deleted.
-If --all is specified, all blocks defined in the config are deleted.
+By default, performs a soft delete (KV v2 keeps version history, recoverable).
 
-By default, performs a soft delete (KV v2 keeps version history).
-Use --permanently to remove secrets and all version history.
+Delete modes (KV v2):
+  (default)  Soft delete - recoverable via 'vault kv undelete'
+  --hard     Destroy version data permanently (metadata remains)
+  --full     Remove all versions and metadata completely
+
+For KV v1, all deletes are permanent.
+
+Use --keys to delete specific keys only (writes new version without those keys).
 
 This is a destructive operation and requires confirmation unless --force is used.`,
-	Example: `  # Delete a specific block's secrets (soft delete)
-  vsg delete main --config config.yaml
+	Example: `  # Soft delete (recoverable in KV v2)
+  vsg delete secret/myapp
 
-  # Permanently delete (removes all versions)
-  vsg delete main --config config.yaml --permanently
+  # Delete specific keys only
+  vsg delete secret/myapp --keys old_key,deprecated_key
 
-  # Delete all secrets defined in config
-  vsg delete --all --config config.yaml --permanently
+  # Destroy version data permanently
+  vsg delete secret/myapp --hard
+
+  # Remove all versions and metadata
+  vsg delete secret/myapp --full
 
   # Delete without confirmation
-  vsg delete main --config config.yaml --permanently --force`,
+  vsg delete secret/myapp --full --force`,
+	Args: cobra.ExactArgs(1),
 	RunE: runDelete,
 }
 
 func init() {
 	rootCmd.AddCommand(deleteCmd)
 
-	deleteCmd.Flags().BoolVar(&deleteAll, "all", false, "delete all blocks defined in config")
 	deleteCmd.Flags().BoolVarP(&deleteForce, "force", "f", false, "skip confirmation prompt")
-	deleteCmd.Flags().BoolVar(&deletePermanently, "permanently", false, "permanently delete (removes all versions)")
+	deleteCmd.Flags().BoolVar(&deleteHard, "hard", false, "destroy version data permanently (KV v2 only)")
+	deleteCmd.Flags().BoolVar(&deleteFull, "full", false, "remove all versions and metadata (KV v2 only)")
+	deleteCmd.Flags().StringVar(&deleteKeys, "keys", "", "comma-separated list of keys to delete")
 }
 
 func runDelete(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 	log := getLogger()
 
-	// Validate args
-	if len(args) == 0 && !deleteAll {
-		return fmt.Errorf("specify a block name or use --all")
-	}
-	if len(args) > 0 && deleteAll {
-		return fmt.Errorf("cannot specify block name with --all")
-	}
+	path := args[0]
 
-	blockName := ""
-	if len(args) > 0 {
-		blockName = args[0]
+	// Validate flags
+	if deleteHard && deleteFull {
+		return fmt.Errorf("cannot use --hard and --full together")
 	}
 
-	// Load config
-	cfgPath, err := getConfigFile()
-	if err != nil {
-		return err
+	// Parse path
+	mount, subpath := parsePath(path)
+	if subpath == "" {
+		return fmt.Errorf("invalid path %q: must include mount and subpath (e.g., secret/myapp)", path)
 	}
 
-	log.Debug("loading config", "path", cfgPath)
-
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
+	// Get Vault address from environment
+	vaultAddr := os.Getenv("VAULT_ADDR")
+	if vaultAddr == "" {
+		return fmt.Errorf("VAULT_ADDR environment variable is required")
 	}
 
-	// Validate block exists
-	if blockName != "" {
-		if _, ok := cfg.Secrets[blockName]; !ok {
-			return fmt.Errorf("block %q not found in config", blockName)
+	// Create minimal vault config for client
+	vaultCfg := struct {
+		Address   string
+		Namespace string
+		Auth      struct {
+			Method    string
+			Token     string
+			Role      string
+			RoleID    string
+			SecretID  string
+			MountPath string
 		}
+	}{
+		Address: vaultAddr,
+		Auth: struct {
+			Method    string
+			Token     string
+			Role      string
+			RoleID    string
+			SecretID  string
+			MountPath string
+		}{
+			Method: "token",
+		},
 	}
 
-	// Create Vault client
-	log.Debug("connecting to vault", "address", cfg.Vault.Address)
+	// Check for namespace
+	if ns := os.Getenv("VAULT_NAMESPACE"); ns != "" {
+		vaultCfg.Namespace = ns
+	}
 
-	vaultClient, err := vault.NewClient(cfg.Vault)
+	log.Debug("connecting to vault", "address", vaultAddr)
+
+	vaultClient, err := vault.NewClientFromEnv(vaultAddr, vaultCfg.Namespace)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error: failed to connect to Vault:", err)
 		os.Exit(ExitVaultError)
 	}
 
-	// Collect blocks to delete
-	var blocksToDelete []config.SecretBlock
-	var blockNames []string
+	// Create KV client (auto-detect version)
+	kv, err := vault.NewKVClient(vaultClient, mount, vault.KVVersionAuto)
+	if err != nil {
+		return fmt.Errorf("creating KV client: %w", err)
+	}
 
-	if deleteAll {
-		for name, block := range cfg.Secrets {
-			blocksToDelete = append(blocksToDelete, block)
-			blockNames = append(blockNames, name)
-		}
-	} else {
-		blocksToDelete = append(blocksToDelete, cfg.Secrets[blockName])
-		blockNames = append(blockNames, blockName)
+	// Determine action description
+	var action string
+	switch {
+	case deleteKeys != "":
+		action = fmt.Sprintf("delete keys [%s] from", deleteKeys)
+	case deleteFull:
+		action = "permanently remove all versions of"
+	case deleteHard:
+		action = "destroy version data of"
+	default:
+		action = "soft delete"
 	}
 
 	// Confirm deletion
 	if !deleteForce {
-		action := "deleted"
-		if deletePermanently {
-			action = "permanently deleted"
+		fmt.Printf("The following secret will be %s:\n", action)
+		fmt.Printf("  Path: %s\n", path)
+
+		if deleteKeys != "" {
+			fmt.Printf("  Keys: %s\n", deleteKeys)
 		}
-		fmt.Printf("The following secrets will be %s:\n", action)
-		for i, block := range blocksToDelete {
-			fmt.Printf("  - %s (%s)\n", blockNames[i], block.Path)
+		if deleteFull {
+			fmt.Println("  WARNING: This will remove ALL versions and metadata!")
+		} else if deleteHard {
+			fmt.Println("  WARNING: This will permanently destroy version data!")
 		}
+
 		fmt.Print("\nAre you sure? [y/N]: ")
 
 		reader := bufio.NewReader(os.Stdin)
@@ -137,47 +172,41 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Delete secrets
-	var errors []error
-	for i, block := range blocksToDelete {
-		mount, subpath := parsePath(block.Path)
-		version := vault.KVVersion(block.Version)
+	// Perform deletion
+	log.Info("deleting secret", "path", path, "action", action)
 
-		kv, err := vault.NewKVClient(vaultClient, mount, version)
-		if err != nil {
-			errors = append(errors, fmt.Errorf("%s: %w", blockNames[i], err))
-			continue
+	switch {
+	case deleteKeys != "":
+		keys := strings.Split(deleteKeys, ",")
+		for i := range keys {
+			keys[i] = strings.TrimSpace(keys[i])
 		}
-
-		action := "deleting"
-		if deletePermanently {
-			action = "permanently deleting"
-		}
-		log.Info(action+" secret", "block", blockNames[i], "path", block.Path)
-
-		if deletePermanently {
-			err = kv.Destroy(ctx, subpath)
-		} else {
-			err = kv.Delete(ctx, subpath)
-		}
-		if err != nil {
-			errors = append(errors, fmt.Errorf("%s: %w", blockNames[i], err))
-			continue
+		err = kv.DeleteKeys(ctx, subpath, keys)
+		if err == nil {
+			fmt.Printf("Deleted keys [%s] from %s\n", deleteKeys, path)
 		}
 
-		result := "Deleted"
-		if deletePermanently {
-			result = "Permanently deleted"
+	case deleteFull:
+		err = kv.DestroyMetadata(ctx, subpath)
+		if err == nil {
+			fmt.Printf("Permanently removed all versions of %s\n", path)
 		}
-		fmt.Printf("%s: %s (%s)\n", result, blockNames[i], block.Path)
+
+	case deleteHard:
+		err = kv.DestroyVersions(ctx, subpath)
+		if err == nil {
+			fmt.Printf("Destroyed version data of %s\n", path)
+		}
+
+	default:
+		err = kv.Delete(ctx, subpath)
+		if err == nil {
+			fmt.Printf("Soft deleted %s (recoverable in KV v2)\n", path)
+		}
 	}
 
-	if len(errors) > 0 {
-		fmt.Fprintln(os.Stderr, "\nErrors:")
-		for _, e := range errors {
-			fmt.Fprintln(os.Stderr, " -", e.Error())
-		}
-		os.Exit(ExitPartialFailure)
+	if err != nil {
+		return fmt.Errorf("deleting secret: %w", err)
 	}
 
 	return nil

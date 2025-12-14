@@ -24,19 +24,24 @@ var applyCmd = &cobra.Command{
 	Long: `Apply reads the configuration file and syncs secrets to Vault.
 
 For each secret defined in the configuration:
-- Terraform state references are fetched and outputs extracted
-- Generated passwords are created (only if they don't exist, unless --force)
+- Remote files are fetched and values extracted via json/yaml/raw functions
+- Generated passwords are created based on strategy (default: create only if missing)
+- Vault references are copied from other Vault paths
+- Commands are executed and output captured
 - Static values are used as-is
 
 Use --dry-run to see what changes would be made without applying them.`,
 	Example: `  # Apply all secrets
-  vsg apply --config config.yaml
+  vsg apply --config config.hcl
+
+  # Apply with variable override
+  vsg apply --config config.hcl --var ENV=prod
 
   # Dry-run to see changes
-  vsg apply --config config.yaml --dry-run
+  vsg apply --config config.hcl --dry-run
 
   # Force regeneration of generated secrets
-  vsg apply --config config.yaml --force`,
+  vsg apply --config config.hcl --force`,
 	RunE: runApply,
 }
 
@@ -59,7 +64,8 @@ func runApply(cmd *cobra.Command, args []string) error {
 
 	log.Debug("loading config", "path", cfgPath)
 
-	cfg, err := config.Load(cfgPath)
+	vars := parseVars()
+	cfg, err := config.Load(cfgPath, vars)
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
@@ -83,7 +89,7 @@ func runApply(cmd *cobra.Command, args []string) error {
 	registry := setupFetchers(ctx)
 
 	// Create engine
-	eng := engine.NewEngine(vaultClient, registry, cfg.Defaults.Generate, log)
+	eng := engine.NewEngine(vaultClient, registry, cfg.Defaults, log)
 
 	// Run reconciliation
 	opts := engine.Options{
@@ -114,9 +120,10 @@ func runApply(cmd *cobra.Command, args []string) error {
 
 	// Report result
 	if applyDryRun {
-		adds, updates, _, _ := result.Diff.Summary()
-		if adds+updates > 0 {
-			fmt.Printf("\nDry-run complete. %d changes would be made.\n", adds+updates)
+		adds, updates, deletes, _, _ := result.Diff.Summary()
+		changes := adds + updates + deletes
+		if changes > 0 {
+			fmt.Printf("\nDry-run complete. %d changes would be made.\n", changes)
 		}
 	} else if result.Applied {
 		fmt.Println("\nSecrets applied successfully.")

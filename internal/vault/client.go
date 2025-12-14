@@ -186,3 +186,36 @@ func (c *Client) CheckHealth(ctx context.Context) error {
 
 	return nil
 }
+
+// NewClientFromEnv creates a new Vault client using environment variables.
+// Uses VAULT_ADDR for address and VAULT_TOKEN for authentication.
+func NewClientFromEnv(addr, namespace string) (*Client, error) {
+	// Create Vault API config
+	vaultCfg := api.DefaultConfig()
+	if addr != "" {
+		vaultCfg.Address = addr
+	}
+
+	// Create the client
+	client, err := api.NewClient(vaultCfg)
+	if err != nil {
+		return nil, fmt.Errorf("creating vault client: %w", err)
+	}
+
+	// Set namespace if specified
+	if namespace != "" {
+		client.SetNamespace(namespace)
+	}
+
+	// Get token from environment
+	token := os.Getenv("VAULT_TOKEN")
+	if token == "" {
+		return nil, fmt.Errorf("VAULT_TOKEN environment variable is required")
+	}
+	client.SetToken(token)
+
+	return &Client{
+		client:    client,
+		namespace: namespace,
+	}, nil
+}
