@@ -457,7 +457,7 @@ spec:
 
 ## Current Status
 
-**Version:** v1.0.0
+**Version:** v1.0.3
 
 ### Implemented Features
 - [x] HCL config parsing with custom functions
@@ -477,8 +477,9 @@ spec:
 - [x] Helm chart
 - [x] Dockerfile
 - [x] GitHub Actions CI/CD
-- [x] goreleaser configuration (v1.0.0 released)
+- [x] goreleaser configuration with auto-release
 - [x] Command execution with multiline output (tested)
+- [x] Homebrew tap (`brew install pavlenkoa/tap/vsg`)
 
 ### Planned
 - [ ] GCS fetcher
