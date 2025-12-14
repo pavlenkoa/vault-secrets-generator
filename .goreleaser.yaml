@@ -42,17 +42,20 @@ archives:
       - LICENSE
       - examples/*
 
-brews:
-  - repository:
+homebrew_casks:
+  - name: vsg
+    repository:
       owner: pavlenkoa
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
+    directory: Casks
     homepage: "https://github.com/pavlenkoa/vault-secrets-generator"
     description: "Vault Secrets Generator - CLI tool for managing secrets in HashiCorp Vault"
-    license: "Apache-2.0"
-    test: |
-      system "#{bin}/vsg", "version"
+    binaries:
+      - vsg
+    caveats: |
+      To allow the binary to run on macOS, you may need to remove the quarantine attribute:
+        xattr -dr com.apple.quarantine $(brew --prefix)/Caskroom/vsg
 
 checksum:
   name_template: "checksums.txt"
