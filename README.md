@@ -2,6 +2,8 @@
 
 A lightweight, cloud-agnostic CLI tool that generates and populates secrets in HashiCorp Vault from various sources including remote files, generated passwords, commands, and static values.
 
+> **📢 Version 2.0 Coming Soon:** VSG is migrating from YAML to HCL configuration. Current v1.x uses YAML (documented below). See [CLAUDE.md](CLAUDE.md) for the v2.0 HCL specification.
+
 ## Features
 
 - **Remote File Integration**: Extract values from JSON/YAML files stored in S3, GCS, or local filesystem using jq/yq-style paths

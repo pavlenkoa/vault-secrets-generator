@@ -1,14 +1,17 @@
 # VSG - Vault Secrets Generator
 
+> **⚠️ Migration Notice:** This project is migrating from YAML (v1.x) to HCL (v2.0) configuration format. The specification below describes the target HCL format. See [Current Status](#current-status) for migration progress.
+
 ## Project Overview
 
 A lightweight, cloud-agnostic CLI tool that generates and populates secrets in HashiCorp Vault from various sources including remote files (Terraform state, configs), generated passwords, commands, and static values.
 
 **Primary use cases:**
-- Extract values from remote JSON/YAML files (S3, GCS, local) and write them to Vault
+- Extract values from remote JSON/YAML files (S3, GCS, Azure, local) and write them to Vault
 - Generate secrets with configurable password policies
 - Run commands to generate values (e.g., password hashing)
-- Declarative YAML configuration for GitOps workflows
+- Copy secrets between Vault paths
+- Declarative HCL configuration for GitOps workflows
 
 ## Tech Stack
 
@@ -25,15 +28,17 @@ vault-secrets-generator/
 │   ├── command/                    # CLI command implementations
 │   │   ├── root.go                 # Root command and global flags
 │   │   ├── apply.go                # Apply command
+│   │   ├── delete.go               # Delete command
 │   │   ├── diff.go                 # Diff command
 │   │   └── version.go              # Version command
 │   ├── config/
-│   │   ├── config.go               # YAML config parsing
+│   │   ├── config.go               # HCL config parsing
 │   │   └── types.go                # Config structs
 │   ├── fetcher/
 │   │   ├── fetcher.go              # Fetcher interface
 │   │   ├── s3.go                   # S3 backend
 │   │   ├── gcs.go                  # GCS backend
+│   │   ├── azure.go                # Azure Blob Storage backend
 │   │   └── local.go                # Local file backend
 │   ├── parser/
 │   │   └── parser.go               # JSON/YAML parser with jq/yq syntax
@@ -51,7 +56,8 @@ vault-secrets-generator/
 │       ├── values.yaml
 │       └── templates/
 ├── examples/
-│   └── config.yaml                 # Example configuration file
+│   ├── config.hcl                  # Example HCL configuration (v2.0)
+│   └── config.yaml                 # Example YAML configuration (v1.x)
 ├── .github/
 │   └── workflows/                  # CI/CD workflows
 ├── .goreleaser.yaml                # Release automation
@@ -67,76 +73,181 @@ vault-secrets-generator/
 
 ## Configuration Format
 
-The tool uses a declarative YAML configuration:
+The tool uses a declarative HCL configuration:
 
-```yaml
-vault:
-  address: https://vault.example.com
-  auth:
-    method: kubernetes
-    role: vsg
+```hcl
+vault {
+  address = "https://vault.example.com"
 
-defaults:
-  generate:
-    length: 32
-    digits: 5
-    symbols: 5
+  auth {
+    method = "kubernetes"
+    role   = "vsg"
+  }
+}
 
-secrets:
-  dev:
-    path: secret/dev
-    data:
-      api_key: generate
-      jwt_secret:
-        generate:
-          length: 64
-      db_host:
-        source: s3://bucket/terraform.tfstate
-        json: .outputs.db_host.value
-      db_port: "5432"
-      caddy_hash:
-        command: caddy hash-password --plaintext "mypassword"
+defaults {
+  strategy {
+    generate = "create"
+    json     = "update"
+    yaml     = "update"
+    raw      = "update"
+    static   = "update"
+    command  = "update"
+    vault    = "update"
+  }
 
-  prod:
-    path: secret/prod
-    data:
-      api_key: generate
-      db_host:
-        source: s3://bucket/prod/terraform.tfstate
-        json: .outputs.db_host.value
+  generate {
+    length     = 32
+    digits     = 5
+    symbols    = 5
+    symbol_set = "-_$@"
+    no_upper   = false
+  }
+}
+
+secret "secret/${env("ENV")}/app" {
+  prune       = true
+  api_key     = generate()
+  jwt_secret  = generate(length = 64, symbols = 0)
+  db_host     = json("s3://bucket/${env("ENV")}/terraform.tfstate", ".outputs.db_host.value")
+  db_port     = "5432"
+  config_host = yaml("gcs://bucket/config.yaml", ".database.host")
+  ssh_key     = raw("s3://bucket/keys/deploy.pem")
+  shared_key  = vault("secret/shared", "api_key")
+  caddy_hash  = command("caddy hash-password --plaintext mypassword")
+
+  # Per-key strategy override
+  special     = generate(length = 64, strategy = "update")
+}
 ```
 
 One secret block = one Vault path = multiple key-value pairs inside.
 
-## Value Types
+## Value Types (HCL Functions)
 
 | Type | Syntax | Example |
 |------|--------|---------|
-| Static | `key: "value"` | `db_port: "5432"` |
-| Generate (defaults) | `key: generate` | `api_key: generate` |
-| Generate (custom) | `key: {generate: {length: 64}}` | `jwt_secret: {generate: {length: 64, symbols: 0}}` |
-| Remote JSON | `key: {source: ..., json: ...}` | `db_host: {source: s3://bucket/file.tfstate, json: .outputs.db_host.value}` |
-| Remote YAML | `key: {source: ..., yaml: ...}` | `config: {source: s3://bucket/config.yaml, yaml: .database.host}` |
-| Command | `key: {command: ...}` | `hash: {command: caddy hash-password --plaintext "xxx"}` |
+| Static | `key = "value"` | `db_port = "5432"` |
+| Generate | `key = generate()` | `api_key = generate()` |
+| Generate (custom) | `key = generate(...)` | `jwt_secret = generate(length = 64, symbols = 0)` |
+| JSON | `key = json(url, query)` | `db_host = json("s3://...", ".outputs.db_host.value")` |
+| YAML | `key = yaml(url, query)` | `config = yaml("gcs://...", ".database.host")` |
+| Raw | `key = raw(url)` | `ssh_key = raw("s3://bucket/key.pem")` |
+| Vault | `key = vault(path, key)` | `shared = vault("secret/shared", "api_key")` |
+| Command | `key = command(cmd)` | `hash = command("caddy hash-password ...")` |
 
-**Source types supported:**
-- `s3://bucket/path`
-- `gcs://bucket/path`
-- `file:///path`
+All functions support optional `strategy` parameter:
 
-**Parser syntax:**
-- `json:` uses jq-style dot notation
-- `yaml:` uses yq-style dot notation
+```hcl
+db_host = json("s3://...", ".outputs.db_host.value", strategy = "create")
+ssh_key = raw("s3://bucket/key.pem", strategy = "create")
+```
+
+## URL Schemes
+
+For `json()`, `yaml()`, `raw()` functions:
+
+| Scheme | Source |
+|--------|--------|
+| `s3://bucket/path` | AWS S3 |
+| `gcs://bucket/path` | Google Cloud Storage |
+| `az://container/path` | Azure Blob Storage |
+| `/path/to/file` | Local file (no scheme) |
+
+## Generate Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `length` | 32 | Total password length |
+| `digits` | 5 | Minimum digit characters |
+| `symbols` | 5 | Minimum symbol characters |
+| `symbol_set` | `-_$@` | Allowed symbol characters |
+| `no_upper` | false | Exclude uppercase letters |
+
+## Environment Variables: env() Function
+
+```hcl
+secret "secret/${env("ENV")}/app" {
+  db_host = json("s3://${env("BUCKET")}/${env("ENV")}/terraform.tfstate", ".outputs.db_host.value")
+  region  = env("REGION")
+}
+```
+
+Usage:
+
+```bash
+# From environment
+ENV=dev BUCKET=my-terraform-state vsg apply
+
+# From CLI (overrides environment)
+vsg apply --var ENV=dev --var BUCKET=my-terraform-state
+
+# Mixed (CLI wins)
+ENV=prod vsg apply --var ENV=dev   # uses "dev"
+```
+
+**Priority:** `--var` CLI flag > environment variable
+
+## Strategies
+
+| Strategy | Key missing | Key exists, same value | Key exists, different value |
+|----------|-------------|------------------------|----------------------------|
+| `create` | Create | Skip | Skip |
+| `update` | Create | Skip | Update |
+
+### Default Strategies
+
+| Value type | Default strategy | Reasoning |
+|------------|-----------------|-----------|
+| `generate` | `create` | Don't regenerate existing passwords |
+| `json` | `update` | Keep in sync with source |
+| `yaml` | `update` | Keep in sync with source |
+| `raw` | `update` | Keep in sync with source |
+| `static` | `update` | Update if changed |
+| `command` | `update` | Re-run and update |
+| `vault` | `update` | Keep in sync with source |
+
+Per-key override via `strategy` parameter in any function.
+
+## Prune (Per Secret)
+
+| `prune` | Key in config | Key in Vault only |
+|---------|---------------|-------------------|
+| `false` (default) | Create/Update | Warn, keep |
+| `true` | Create/Update | Delete |
 
 ## CLI Interface
 
 ```bash
-vsg apply --config config.yaml
-vsg apply --config config.yaml --force      # regenerate all passwords
-vsg apply --config config.yaml --dry-run    # preview changes
-vsg diff --config config.yaml               # show diff
+vsg apply                                  # apply config to vault
+vsg apply --config config.hcl              # specify config file
+vsg apply --dry-run                        # preview changes
+vsg apply --force                          # regenerate all passwords
+vsg apply --var ENV=dev --var REGION=us    # pass variables
+
+vsg diff                                   # show diff
+vsg diff --config config.hcl
+
+# Delete entire secret
+vsg delete secret/path                     # soft delete (default, recoverable)
+vsg delete secret/path --hard              # destroy version data permanently
+vsg delete secret/path --full              # remove all versions + metadata
+
+# Delete specific keys (writes new version without those keys)
+vsg delete secret/path --keys key1,key2
+
 vsg version
 ```
+
+### Delete Flags (KV v2)
+
+| VSG Flag | Vault Equivalent | Effect |
+|----------|------------------|--------|
+| (default) | `vault kv delete` | Soft delete, recoverable via `vault kv undelete` |
+| `--hard` | `vault kv destroy` | Permanently destroy version data, metadata remains |
+| `--full` | `vault kv metadata delete` | Remove all versions and metadata completely |
+
+**Note:** `--hard` and `--full` only apply to KV v2. KV v1 delete is always permanent.
 
 ### Exit Codes
 
@@ -146,47 +257,36 @@ vsg version
 - `3` - Source file fetch error
 - `4` - Partial failure (some secrets failed)
 
-## Reconciliation Strategy
-
-| Scenario | Behavior |
-|----------|----------|
-| Key in config, not in Vault | Create |
-| Key in config (generate), exists in Vault | Skip (keep existing) |
-| Key in config (generate) + `--force` flag | Regenerate |
-| Key in config (source), value changed | Update |
-| Key in config (static), value changed | Update |
-| Key in config (command) | Run command, update if changed |
-| Key in Vault, not in config | Warn (log unmanaged key) |
-
-No deletion support - use vault CLI directly for that.
-
 ## Vault Auto-Detection
 
-VSG auto-detects KV v1 vs v2 by querying `/sys/mounts`. User just specifies the path (e.g., `secret/dev`), VSG figures out the engine version and uses the appropriate API.
+VSG auto-detects KV v1 vs v2 by querying `/sys/mounts`. User specifies path (e.g., `secret/dev`), VSG determines engine version automatically.
 
 ## Core Logic
 
 ### Reconciliation Flow
 
-1. Parse and validate config YAML
-2. For each secret block:
+1. Parse and validate config HCL
+2. Resolve all `env()` function calls
+3. For each secret block:
    a. Connect to Vault at specified path
    b. Read current secrets (if exist)
-   c. For each secret in data:
-      - If source reference: fetch file, extract value using json/yaml parser
-      - If generate: generate password (only if secret doesn't exist OR --force)
-      - If command: run command and capture output
+   c. For each key in data:
+      - If `json()`/`yaml()`/`raw()`: fetch file, extract value
+      - If `generate()`: generate password based on strategy
+      - If `vault()`: read from source Vault path
+      - If `command()`: run command and capture output
       - If static: use value as-is
-   d. Compare current vs desired
+   d. Apply strategy (create vs update) per key
    e. Write changes to Vault (unless --dry-run)
-3. Report results
+   f. If `prune = true`: delete keys in Vault not in config
+4. Report results
 
 ### Important Behaviors
 
-1. **Idempotency for generated secrets:**
-   - Generated passwords should only be created if the secret doesn't exist in Vault
-   - Use `--force` flag to regenerate existing secrets
-   - This prevents password rotation on every run
+1. **Strategy-based reconciliation:**
+   - `create` strategy: only creates new keys, never updates existing
+   - `update` strategy: creates new keys and updates changed values
+   - `--force` flag: regenerate all passwords regardless of strategy
 
 2. **Source file caching:**
    - Cache fetched files during a single run
@@ -209,14 +309,13 @@ type Fetcher interface {
 }
 ```
 
-Implementations needed:
+Implementations:
 - `s3://` - AWS S3 (use AWS SDK, support IRSA and standard credential chain)
 - `gcs://` - Google Cloud Storage
-- `file://` - Local filesystem
+- `az://` - Azure Blob Storage
+- Local filesystem (no scheme)
 
 ## Password Generator
-
-Based on External Secrets Operator spec:
 
 ```go
 type PasswordPolicy struct {
@@ -225,7 +324,6 @@ type PasswordPolicy struct {
     Symbols          int    // Minimum symbols (default: 5)
     SymbolCharacters string // Allowed symbols (default: "-_$@")
     NoUpper          bool   // Exclude uppercase (default: false)
-    AllowRepeat      bool   // Allow repeated characters (default: true)
 }
 ```
 
@@ -251,6 +349,7 @@ VAULT_NAMESPACE     # Vault namespace (enterprise)
 AWS_REGION          # AWS region for S3
 AWS_PROFILE         # AWS profile (optional)
 GOOGLE_APPLICATION_CREDENTIALS  # GCP service account (for GCS)
+AZURE_STORAGE_ACCOUNT           # Azure storage account
 VSG_CONFIG          # Default config file path
 ```
 
@@ -274,28 +373,30 @@ ENTRYPOINT ["vsg"]
 
 1. **Unit tests** for each package
 2. **Integration tests** with local Vault dev server
-3. **Mock fetchers** for S3/GCS in tests
+3. **Mock fetchers** for S3/GCS/Azure in tests
 
 ## Dependencies (keep minimal)
 
 ```
 github.com/spf13/cobra          # CLI framework
+github.com/hashicorp/hcl/v2     # HCL parser
 github.com/hashicorp/vault/api  # Vault client
 github.com/aws/aws-sdk-go-v2    # S3 access
 cloud.google.com/go/storage     # GCS access
-gopkg.in/yaml.v3                # YAML parsing
+github.com/Azure/azure-sdk-for-go/sdk/storage/azblob  # Azure Blob access
 ```
 
 ## Implementation Order
 
-1. **Phase 1:** Config parsing
+1. **Phase 1:** HCL config parsing with custom functions
 2. **Phase 2:** Password generator
 3. **Phase 3:** Local file fetcher + JSON/YAML parser
 4. **Phase 4:** Vault client (token auth, KV v2)
 5. **Phase 5:** S3 fetcher
-6. **Phase 6:** Reconciliation engine + dry-run
+6. **Phase 6:** Reconciliation engine with strategies + dry-run
 7. **Phase 7:** CLI with cobra
-8. **Phase 8:** Additional features (GCS, command execution, etc.)
+8. **Phase 8:** Additional features (GCS, Azure, command execution, prune)
+9. **Phase 9:** Delete command
 
 ## Code Style
 
@@ -329,10 +430,12 @@ spec:
           containers:
             - name: vsg
               image: ghcr.io/pavlenkoa/vault-secrets-generator:latest
-              args: ["apply", "--config", "/etc/config/secrets.yaml"]
+              args: ["apply", "--config", "/etc/config/secrets.hcl"]
               env:
                 - name: VAULT_ADDR
                   value: "http://vault.vault:8200"
+                - name: ENV
+                  value: "prod"
               volumeMounts:
                 - name: config
                   mountPath: /etc/config
@@ -350,4 +453,37 @@ spec:
 - Multi-Vault support (single Vault per config)
 - Webhooks or event-driven sync
 - Web UI
-- Automatic deletion of unmanaged keys
+
+## Current Status
+
+**Phase:** Migration from YAML to HCL config
+
+### Completed (YAML version - v1.x)
+- [x] Config parsing (YAML)
+- [x] Password generator with configurable policies
+- [x] Local file fetcher
+- [x] S3 fetcher (AWS SDK v2)
+- [x] Vault client (token auth, KV v1/v2)
+- [x] Reconciliation engine + dry-run
+- [x] CLI with cobra
+- [x] Helm chart
+- [x] Dockerfile
+- [x] GitHub Actions CI/CD
+- [x] goreleaser configuration
+
+### In Progress (v2.0 - HCL Migration)
+- [ ] **HCL Migration**: Migrate config format from YAML to HCL
+  - [ ] New HCL parser with custom functions
+  - [ ] `env()` function for environment variables
+  - [ ] `generate()`, `json()`, `yaml()`, `raw()`, `vault()`, `command()` functions
+  - [ ] Strategy system (`create` vs `update`) per value type
+  - [ ] Per-key strategy override
+  - [ ] Prune logic per secret block
+  - [ ] Update CLI for `--var` flag
+  - [ ] Delete command with `--hard` and `--full` flags
+
+### Planned
+- [ ] GCS fetcher
+- [ ] Azure Blob Storage fetcher
+- [ ] Kubernetes auth testing
+- [ ] AppRole auth testing
