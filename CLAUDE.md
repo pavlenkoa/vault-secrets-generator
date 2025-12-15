@@ -469,14 +469,9 @@ secret "kv/${env("ENV")}/app" {
 }
 ```
 
-**Workaround:** Use hardcoded paths or pass the entire path via `--var`:
-```hcl
-secret "kv/dev/app" {
-  api_key = generate()
-}
-```
+**Workaround:** Use hardcoded paths for now.
 
-The `env()` function works in attribute values, just not in block labels (paths).
+**Planned fix:** The [Secret Block Restructure](#planned-feature-secret-block-restructure) feature will solve this by moving the path to an attribute inside a `content {}` block, where interpolation works natively.
 
 ## Current Status
 
@@ -505,11 +500,65 @@ The `env()` function works in attribute values, just not in block labels (paths)
 - [x] Homebrew tap (`brew install pavlenkoa/tap/vsg`)
 
 ### Planned
+- [ ] Secret block restructure with `content {}` (see below) - **next**
 - [ ] GCS fetcher
 - [ ] Azure Blob Storage fetcher
 - [ ] Kubernetes auth
 - [ ] AppRole auth
 - [ ] Password hashing functions with referential values (see below)
+
+## Planned Feature: Secret Block Restructure
+
+### Problem
+
+HCL block labels don't support `${...}` template interpolation - it's rejected by the parser. This prevents dynamic secret paths like `secret "kv/${env("ENV")}/app"`.
+
+### Solution
+
+Restructure secret blocks to separate metadata from content:
+
+```hcl
+secret "my-app" {
+  path  = "kv/${env("ENV")}/app"  # Expression - interpolation works!
+  prune = true
+
+  content {
+    api_key     = generate()
+    db_password = generate({length = 24})
+    path        = "some value"  # No conflict with path attribute
+  }
+}
+```
+
+### Benefits
+
+- `path` is an HCL expression, so `env()` and `${...}` interpolation work natively
+- Block label becomes an identifier (for logging, errors, referencing)
+- No reserved key conflicts - `content {}` isolates secret data
+- Room for more metadata attributes in the future
+
+### Backward Compatibility
+
+Support both forms:
+
+```hcl
+# Short form - label IS the path (current behavior, no interpolation)
+secret "kv/static/app" {
+  content {
+    api_key = generate()
+  }
+}
+
+# Long form - explicit path with interpolation
+secret "dynamic-app" {
+  path = "kv/${env("ENV")}/app"
+  content {
+    api_key = generate()
+  }
+}
+```
+
+If `path` attribute is omitted, the block label is used as the path (backward compatible with current behavior, minus the content wrapper).
 
 ## Planned Feature: Password Hashing Functions
 
