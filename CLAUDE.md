@@ -455,6 +455,29 @@ spec:
 - Webhooks or event-driven sync
 - Web UI
 
+## Known Limitations
+
+### No Template Interpolation in Secret Paths
+
+HCL block labels (the secret path) do not support `${...}` template interpolation. This is a limitation of the HCL parser itself - template sequences are rejected during parsing.
+
+**Does NOT work:**
+```hcl
+# This will fail with: "Template sequences are not allowed in this string"
+secret "kv/${env("ENV")}/app" {
+  api_key = generate()
+}
+```
+
+**Workaround:** Use hardcoded paths or pass the entire path via `--var`:
+```hcl
+secret "kv/dev/app" {
+  api_key = generate()
+}
+```
+
+The `env()` function works in attribute values, just not in block labels (paths).
+
 ## Current Status
 
 **Version:** v1.0.3
