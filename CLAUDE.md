@@ -509,6 +509,7 @@ spec:
 - [x] **v2.0.0 config structure** with `content {}` block and path interpolation
 
 ### Planned
+- [ ] **v2.1.0** - Secret filtering and config-based delete (see below)
 - [ ] GCS fetcher
 - [ ] Azure Blob Storage fetcher
 - [ ] Kubernetes auth testing
@@ -684,6 +685,176 @@ secret "db" {
 5. `terraform apply` (Terraform stops managing)
 
 **Note:** Run VSG before removing Terraform resource to avoid downtime. Generated passwords won't match old ones - coordinate with app deployments.
+
+## v2.1.0 Planned Features
+
+### 1. Secret Filtering: `enabled` attribute and `--target`/`--exclude` flags
+
+#### Config attribute
+
+```hcl
+secret "prod-app" {
+  enabled = true  # default, can set to false to skip
+  path    = "prod/app"
+
+  content {
+    api_key = generate()
+  }
+}
+
+secret "broken-secret" {
+  enabled = false  # VSG will skip this block
+  path    = "broken/path"
+
+  content {
+    key = generate()
+  }
+}
+```
+
+#### CLI flags for `apply` and `diff` commands
+
+```bash
+# Target specific secrets by label
+vsg apply --target prod-app
+vsg apply --target prod-app,prod-db
+vsg apply -t prod-app -t prod-db
+
+# Exclude specific secrets by label
+vsg apply --exclude broken-secret
+vsg apply --exclude broken,legacy
+vsg apply -e broken -e legacy
+
+# Combine
+vsg apply --target prod-app,prod-db --exclude prod-db-readonly
+
+# Works with diff too
+vsg diff --target prod-app
+vsg diff --exclude broken-secret
+```
+
+#### Behavior matrix
+
+| Config `enabled` | CLI flag | Result |
+|------------------|----------|--------|
+| `true` (default) | none | Run |
+| `true` | `--target other` | Skip |
+| `true` | `--target this` | Run |
+| `true` | `--exclude this` | Skip |
+| `false` | none | Skip |
+| `false` | `--target this` | Run (override) |
+| `false` | `--exclude this` | Skip |
+
+#### Flag details
+
+| Flag | Short | Commands | Description |
+|------|-------|----------|-------------|
+| `--target` | `-t` | `apply`, `diff` | Target specific secrets by label (comma-separated or repeated) |
+| `--exclude` | `-e` | `apply`, `diff` | Exclude secrets by label (comma-separated or repeated) |
+
+### 2. Config-based Delete
+
+Extend `delete` command to support config-based deletion:
+
+#### Two modes
+
+**Path mode (existing):**
+```bash
+vsg delete secret/myapp
+vsg delete secret/myapp --keys old_key
+vsg delete secret/myapp --hard
+vsg delete secret/myapp --full
+```
+
+**Config mode (new):**
+```bash
+# Delete specific secret defined in config
+vsg delete --config config.hcl --target prod-app
+
+# Delete multiple secrets from config
+vsg delete --config config.hcl --target prod-app,prod-db
+
+# Delete all secrets defined in config
+vsg delete --config config.hcl --all
+
+# Delete all except specific ones
+vsg delete --config config.hcl --all --exclude keep-this
+
+# Combine with delete flags
+vsg delete --config config.hcl --target prod-app --hard
+vsg delete --config config.hcl --all --full
+```
+
+#### Validation
+
+- Path mode and config mode are mutually exclusive
+- Config mode requires either `--target` or `--all` flag
+- `--all` requires confirmation (unless `--force`)
+
+#### Updated help for delete
+
+```
+Delete removes secrets from Vault.
+
+Two modes:
+  Path mode:   vsg delete <path> [flags]
+  Config mode: vsg delete --config <file> (--target <labels> | --all) [flags]
+
+Path mode deletes a secret at the specified path directly.
+Config mode deletes secrets defined in the config file.
+
+Delete modes (KV v2):
+  (default)  Soft delete - recoverable via 'vault kv undelete'
+  --hard     Destroy version data permanently (metadata remains)
+  --full     Remove all versions and metadata completely
+
+For KV v1, all deletes are permanent.
+
+Usage:
+  vsg delete <path> [flags]
+  vsg delete --config <file> (--target <labels> | --all) [flags]
+
+Examples:
+  # Path mode - delete specific path
+  vsg delete secret/myapp
+  vsg delete secret/myapp --hard
+  vsg delete secret/myapp --keys old_key,deprecated_key
+
+  # Config mode - delete secrets from config
+  vsg delete --config config.hcl --target prod-app
+  vsg delete --config config.hcl --target prod-app,prod-db --hard
+  vsg delete --config config.hcl --all
+  vsg delete --config config.hcl --all --exclude keep-this --force
+
+Flags:
+      --all             delete all secrets in config (config mode)
+  -e, --exclude strings exclude secrets by label (config mode, comma-separated or repeated)
+  -f, --force           skip confirmation prompt
+      --full            remove all versions and metadata (KV v2 only)
+      --hard            destroy version data permanently (KV v2 only)
+  -h, --help            help for delete
+      --keys string     comma-separated list of keys to delete (path mode)
+  -t, --target strings  target secrets by label (config mode, comma-separated or repeated)
+```
+
+### 3. Implementation Notes
+
+- Use Cobra's `StringSliceP` for `--target` and `--exclude` flags (supports both comma-separated and repeated)
+- `enabled` defaults to `true` if not specified
+- `--target` overrides `enabled = false` (useful for testing disabled secrets)
+- Config-based delete resolves `mount + path` from config to get actual Vault path
+
+### 4. Implementation Checklist
+
+- [ ] Add `Enabled` field to `SecretBlock` in `internal/config/types.go`
+- [ ] Parse `enabled` attribute in `internal/config/hcl.go`
+- [ ] Add `--target` and `--exclude` flags to `apply` command
+- [ ] Add `--target` and `--exclude` flags to `diff` command
+- [ ] Implement filtering logic in engine
+- [ ] Add config mode to `delete` command with `--target`, `--all`, `--exclude`
+- [ ] Add validation for mutually exclusive modes
+- [ ] Update tests
+- [ ] Update README.md and examples
 
 ## Planned Feature: Password Hashing Functions
 
