@@ -621,7 +621,6 @@ Example with `mount = "secret"`, `path = "prod/app"`:
 - [ ] Update tests for new config structure
 - [ ] Update `CLAUDE.md` with new config examples
 - [ ] Update `README.md` with new config examples
-- [ ] Create `docs/migration-v1-to-v2.md`
 - [ ] Create `docs/migration-from-terraform.md`
 - [ ] Update `examples/config.hcl`
 - [ ] Bump version to v2.0.0
@@ -632,37 +631,7 @@ Example with `mount = "secret"`, `path = "prod/app"`:
 - **Interpolation**: `${env("VAR")}` works in `path` attribute (it's an HCL expression now)
 - **Reserved keys**: `mount`, `path`, `version`, `prune` are metadata; user can have keys with same names inside `content {}`
 
-### 8. Migration Guide: v1.x to v2.0
-
-Create `docs/migration-v1-to-v2.md`:
-
-#### Before (v1.x)
-```hcl
-secret "kv/prod/app" {
-  api_key = generate()
-  db_host = json("s3://...", ".outputs.db_host.value")
-}
-```
-
-#### After (v2.0)
-```hcl
-secret "prod-app" {
-  mount = "kv"
-  path  = "prod/app"
-
-  content {
-    api_key = generate()
-    db_host = json("s3://...", ".outputs.db_host.value")
-  }
-}
-```
-
-#### Migration Steps
-1. Update config file to new structure
-2. Test with `vsg apply --dry-run`
-3. Apply with `vsg apply`
-
-### 9. Migration Guide: Terraform to VSG
+### 8. Migration Guide: Terraform to VSG
 
 Create `docs/migration-from-terraform.md`:
 
