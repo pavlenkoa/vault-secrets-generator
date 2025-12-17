@@ -63,22 +63,33 @@ snapshot:
 
 changelog:
   sort: asc
-  use: github
+  use: git
   filters:
     exclude:
       - "^docs:"
       - "^test:"
       - "^chore:"
       - "^ci:"
+      - "(?i)^.*planned feature.*$"
+      - "(?i)^.*implementation plan.*$"
       - Merge pull request
       - Merge branch
   groups:
-    - title: Features
-      regexp: "^.*feat[(\\w)]*:+.*$"
+    - title: "⚠️ Breaking Changes"
+      regexp: "(?i)^.*breaking.*$"
       order: 0
-    - title: Bug Fixes
-      regexp: "^.*fix[(\\w)]*:+.*$"
+    - title: Features
+      regexp: "(?i)^.*(feat|implement|add(?!.*plan)).*$"
       order: 1
+    - title: Bug Fixes
+      regexp: "(?i)^.*(fix|bugfix).*$"
+      order: 2
+    - title: Infrastructure
+      regexp: "(?i)^.*(update.*version|update.*depend|upgrade).*$"
+      order: 3
+    - title: Documentation
+      regexp: "(?i)^.*(document|readme|claude\\.md).*$"
+      order: 4
     - title: Other
       order: 999
 
