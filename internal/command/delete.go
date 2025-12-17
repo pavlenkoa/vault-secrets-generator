@@ -242,7 +242,7 @@ func runDeleteConfigMode(ctx context.Context, log *slog.Logger) error {
 	}
 
 	// Build list of secrets to delete
-	var secretsToDelete []config.SecretBlock
+	secretsToDelete := make([]config.SecretBlock, 0, len(cfg.Secrets))
 	for name, block := range cfg.Secrets {
 		// If using --target, only include targeted secrets
 		if len(deleteTarget) > 0 {
