@@ -43,6 +43,7 @@ config:
   #   }
   #
   #   defaults {
+  #     mount = "secret"
   #     generate {
   #       length  = 32
   #       digits  = 5
@@ -50,16 +51,24 @@ config:
   #     }
   #   }
   #
-  #   secret "kv/prod/database" {
-  #     host     = json("s3://terraform-state/prod/rds.tfstate", ".outputs.endpoint.value")
-  #     password = generate()
-  #     port     = "5432"
+  #   secret "prod-database" {
+  #     path = "prod/database"
+  #
+  #     content {
+  #       host     = json("s3://terraform-state/prod/rds.tfstate", ".outputs.endpoint.value")
+  #       password = generate()
+  #       port     = "5432"
+  #     }
   #   }
   #
-  #   secret "kv/prod/app" {
-  #     api_key    = generate()
-  #     jwt_secret = generate({length = 64, symbols = 0})
-  #     environment = "production"
+  #   secret "prod-app" {
+  #     path = "prod/app"
+  #
+  #     content {
+  #       api_key     = generate()
+  #       jwt_secret  = generate({length = 64, symbols = 0})
+  #       environment = "production"
+  #     }
   #   }
   inline: ""
 
