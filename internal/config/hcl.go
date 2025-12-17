@@ -649,6 +649,7 @@ var secretBlockSchema = &hcl.BodySchema{
 		{Name: "path", Required: true},
 		{Name: "version"},
 		{Name: "prune"},
+		{Name: "enabled"},
 	},
 	Blocks: []hcl.BlockHeaderSchema{
 		{Type: "content"},
@@ -702,6 +703,16 @@ func parseSecretBlock(block *hcl.Block, name string, evalCtx *hcl.EvalContext) (
 			return nil, fmt.Errorf("evaluating prune: %s", valDiags.Error())
 		}
 		secret.Prune = val.True()
+	}
+
+	// Parse enabled attribute (optional, defaults to true)
+	if attr, exists := bodyContent.Attributes["enabled"]; exists {
+		val, valDiags := attr.Expr.Value(evalCtx)
+		if valDiags.HasErrors() {
+			return nil, fmt.Errorf("evaluating enabled: %s", valDiags.Error())
+		}
+		enabled := val.True()
+		secret.Enabled = &enabled
 	}
 
 	// Parse content block (required)

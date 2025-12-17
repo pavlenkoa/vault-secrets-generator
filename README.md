@@ -12,6 +12,7 @@ A lightweight, cloud-agnostic CLI tool that generates and populates secrets in H
 - **Copy Between Paths**: Copy secrets between Vault paths using `vault()` function
 - **Strategy System**: Control when values are created vs updated with `create` and `update` strategies
 - **Prune Support**: Optionally delete unmanaged keys from Vault paths
+- **Secret Filtering**: Target or exclude specific secrets with `--target`/`--exclude` flags
 - **Idempotent Operations**: Generated passwords are preserved unless strategy or force flag overrides
 - **Dry-Run Support**: Preview changes before applying them
 - **Multiple Auth Methods**: Token, Kubernetes, and AppRole authentication
@@ -109,11 +110,28 @@ Apply secrets to Vault.
 vsg apply --config config.hcl [flags]
 ```
 
-| Flag | Description |
-|------|-------------|
-| `--dry-run` | Show what would be done without making changes |
-| `--force` | Force regeneration of generated secrets |
-| `--var KEY=VALUE` | Set variable (can be repeated) |
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--dry-run` | | Show what would be done without making changes |
+| `--force` | | Force regeneration of generated secrets |
+| `--target` | `-t` | Target specific secrets by label (comma-separated or repeated) |
+| `--exclude` | `-e` | Exclude secrets by label (comma-separated or repeated) |
+| `--var KEY=VALUE` | | Set variable (can be repeated) |
+
+Examples:
+
+```bash
+# Apply all secrets
+vsg apply --config config.hcl
+
+# Apply specific secrets only
+vsg apply --config config.hcl --target prod-app
+vsg apply --config config.hcl -t prod-app -t prod-db
+
+# Apply all except specific secrets
+vsg apply --config config.hcl --exclude broken-secret
+vsg apply --config config.hcl -e broken -e legacy
+```
 
 #### `vsg diff`
 
@@ -123,40 +141,63 @@ Show differences between current and desired state.
 vsg diff --config config.hcl [flags]
 ```
 
-| Flag | Description |
-|------|-------------|
-| `--output` | Output format: `text` (default) or `json` |
-| `--var KEY=VALUE` | Set variable (can be repeated) |
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--output` | `-o` | Output format: `text` (default) or `json` |
+| `--target` | `-t` | Target specific secrets by label (comma-separated or repeated) |
+| `--exclude` | `-e` | Exclude secrets by label (comma-separated or repeated) |
+| `--var KEY=VALUE` | | Set variable (can be repeated) |
 
 #### `vsg delete`
 
-Delete secrets from Vault. Works directly with Vault paths (no config required).
+Delete secrets from Vault. Supports two modes:
+
+**Path mode**: Delete a secret at a specific Vault path directly.
 
 ```bash
 vsg delete <path> [flags]
 ```
 
-| Flag | Description |
-|------|-------------|
-| `--force` | Skip confirmation prompt |
-| `--hard` | Destroy version data permanently (KV v2 only) |
-| `--full` | Remove all versions and metadata (KV v2 only) |
-| `--keys` | Comma-separated list of keys to delete |
+**Config mode**: Delete secrets defined in a config file.
+
+```bash
+vsg delete --config <file> (--target <labels> | --all) [flags]
+```
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--force` | `-f` | Skip confirmation prompt |
+| `--hard` | | Destroy version data permanently (KV v2 only) |
+| `--full` | | Remove all versions and metadata (KV v2 only) |
+| `--keys` | | Comma-separated list of keys to delete (path mode only) |
+| `--target` | `-t` | Target secrets by label (config mode, comma-separated or repeated) |
+| `--exclude` | `-e` | Exclude secrets by label (config mode, comma-separated or repeated) |
+| `--all` | | Delete all secrets in config (config mode) |
 
 Examples:
 
 ```bash
-# Soft delete (recoverable in KV v2)
+# Path mode - soft delete (recoverable in KV v2)
 vsg delete secret/myapp
 
-# Delete specific keys only
+# Path mode - delete specific keys only
 vsg delete secret/myapp --keys old_key,deprecated_key
 
-# Destroy version data permanently
+# Path mode - destroy version data permanently
 vsg delete secret/myapp --hard
 
-# Remove all versions and metadata
+# Path mode - remove all versions and metadata
 vsg delete secret/myapp --full
+
+# Config mode - delete specific secrets by label
+vsg delete --config config.hcl --target prod-app
+vsg delete --config config.hcl --target prod-app,prod-db --hard
+
+# Config mode - delete all secrets in config
+vsg delete --config config.hcl --all
+
+# Config mode - delete all except specific ones
+vsg delete --config config.hcl --all --exclude keep-this --force
 ```
 
 #### `vsg version`
@@ -179,6 +220,7 @@ secret "<name>" {
   path    = "myapp/config"     # Required: Path within the mount
   version = 2                  # Optional: KV version 1 or 2 (default: auto-detect)
   prune   = false              # Optional: Delete unmanaged keys (default: false)
+  enabled = true               # Optional: Process this secret (default: true)
 
   content {
     # Key-value pairs go here
@@ -186,6 +228,31 @@ secret "<name>" {
     db_host  = "localhost"
   }
 }
+```
+
+#### The `enabled` Attribute
+
+Set `enabled = false` to skip a secret block during apply/diff operations:
+
+```hcl
+secret "prod-app" {
+  enabled = true  # Default, can be omitted
+  path    = "prod/app"
+  content { key = generate() }
+}
+
+secret "broken-secret" {
+  enabled = false  # VSG will skip this block
+  path    = "broken/path"
+  content { key = generate() }
+}
+```
+
+The `--target` flag overrides `enabled = false`, allowing you to run disabled secrets explicitly:
+
+```bash
+# This will run broken-secret even though enabled = false
+vsg apply --config config.hcl --target broken-secret
 ```
 
 The `path` attribute supports interpolation:

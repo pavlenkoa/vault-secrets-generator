@@ -11,7 +11,11 @@ import (
 	"github.com/pavlenkoa/vault-secrets-generator/internal/vault"
 )
 
-var diffOutput string
+var (
+	diffOutput  string
+	diffTarget  []string
+	diffExclude []string
+)
 
 var diffCmd = &cobra.Command{
 	Use:   "diff",
@@ -19,7 +23,9 @@ var diffCmd = &cobra.Command{
 	Long: `Diff compares the current secrets in Vault with the desired state
 defined in the configuration file and shows what changes would be made.
 
-This is equivalent to 'apply --dry-run' but with more output options.`,
+This is equivalent to 'apply --dry-run' but with more output options.
+Use --target to diff specific secrets by label.
+Use --exclude to skip specific secrets by label.`,
 	Example: `  # Show diff in text format
   vsg diff --config config.hcl
 
@@ -27,7 +33,14 @@ This is equivalent to 'apply --dry-run' but with more output options.`,
   vsg diff --config config.hcl --var ENV=prod
 
   # Show diff in JSON format
-  vsg diff --config config.hcl --output json`,
+  vsg diff --config config.hcl --output json
+
+  # Diff specific secrets by label
+  vsg diff --config config.hcl --target prod-app
+  vsg diff --config config.hcl -t prod-app -t prod-db
+
+  # Diff all except specific secrets
+  vsg diff --config config.hcl --exclude broken-secret`,
 	RunE: runDiff,
 }
 
@@ -35,6 +48,8 @@ func init() {
 	rootCmd.AddCommand(diffCmd)
 
 	diffCmd.Flags().StringVarP(&diffOutput, "output", "o", "text", "output format: text, json")
+	diffCmd.Flags().StringSliceVarP(&diffTarget, "target", "t", nil, "target specific secrets by label (comma-separated or repeated)")
+	diffCmd.Flags().StringSliceVarP(&diffExclude, "exclude", "e", nil, "exclude secrets by label (comma-separated or repeated)")
 }
 
 func runDiff(cmd *cobra.Command, args []string) error {
@@ -78,7 +93,9 @@ func runDiff(cmd *cobra.Command, args []string) error {
 
 	// Run plan (dry-run)
 	opts := engine.Options{
-		DryRun: true,
+		DryRun:  true,
+		Target:  diffTarget,
+		Exclude: diffExclude,
 	}
 
 	result, err := eng.Plan(ctx, cfg, opts)

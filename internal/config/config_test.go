@@ -688,3 +688,106 @@ secret "app" {
 		t.Errorf("expected block version=1 (from defaults), got %d", block.Version)
 	}
 }
+
+func TestParseHCL_Enabled(t *testing.T) {
+	hcl := `
+secret "enabled-secret" {
+  path    = "enabled"
+  enabled = true
+
+  content {
+    key = "value"
+  }
+}
+
+secret "disabled-secret" {
+  path    = "disabled"
+  enabled = false
+
+  content {
+    key = "value"
+  }
+}
+
+secret "default-secret" {
+  path = "default"
+
+  content {
+    key = "value"
+  }
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// enabled = true
+	enabledBlock := cfg.Secrets["enabled-secret"]
+	if enabledBlock.Enabled == nil {
+		t.Error("expected enabled to be set for enabled-secret")
+	} else if !*enabledBlock.Enabled {
+		t.Error("expected enabled=true for enabled-secret")
+	}
+	if !enabledBlock.IsEnabled() {
+		t.Error("IsEnabled() should return true for enabled-secret")
+	}
+
+	// enabled = false
+	disabledBlock := cfg.Secrets["disabled-secret"]
+	if disabledBlock.Enabled == nil {
+		t.Error("expected enabled to be set for disabled-secret")
+	} else if *disabledBlock.Enabled {
+		t.Error("expected enabled=false for disabled-secret")
+	}
+	if disabledBlock.IsEnabled() {
+		t.Error("IsEnabled() should return false for disabled-secret")
+	}
+
+	// enabled not set (default: true)
+	defaultBlock := cfg.Secrets["default-secret"]
+	if defaultBlock.Enabled != nil {
+		t.Error("expected enabled to be nil (not set) for default-secret")
+	}
+	if !defaultBlock.IsEnabled() {
+		t.Error("IsEnabled() should return true (default) for default-secret")
+	}
+}
+
+func TestSecretBlock_IsEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		enabled  *bool
+		expected bool
+	}{
+		{
+			name:     "nil (default)",
+			enabled:  nil,
+			expected: true,
+		},
+		{
+			name:     "true",
+			enabled:  boolPtr(true),
+			expected: true,
+		},
+		{
+			name:     "false",
+			enabled:  boolPtr(false),
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			block := SecretBlock{Enabled: tt.enabled}
+			if got := block.IsEnabled(); got != tt.expected {
+				t.Errorf("IsEnabled() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func boolPtr(b bool) *bool {
+	return &b
+}

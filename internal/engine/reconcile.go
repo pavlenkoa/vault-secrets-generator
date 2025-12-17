@@ -20,8 +20,10 @@ type Engine struct {
 
 // Options configures the engine behavior.
 type Options struct {
-	DryRun bool
-	Force  bool // Force regeneration of generated secrets
+	DryRun  bool
+	Force   bool     // Force regeneration of generated secrets
+	Target  []string // Target specific secrets by label (empty = all)
+	Exclude []string // Exclude secrets by label
 }
 
 // Result contains the outcome of a reconciliation.
@@ -92,6 +94,45 @@ func NewEngine(vaultClient *vault.Client, fetchers *fetcher.Registry, defaults c
 	}
 }
 
+// shouldProcessBlock determines if a secret block should be processed based on
+// its enabled state and the target/exclude filters.
+//
+// Behavior matrix:
+// | Config enabled | CLI flag        | Result |
+// |----------------|-----------------|--------|
+// | true (default) | none            | Run    |
+// | true           | --target other  | Skip   |
+// | true           | --target this   | Run    |
+// | true           | --exclude this  | Skip   |
+// | false          | none            | Skip   |
+// | false          | --target this   | Run    |
+// | false          | --exclude this  | Skip   |
+func shouldProcessBlock(block config.SecretBlock, opts Options) bool {
+	name := block.Name
+
+	// Check if explicitly excluded
+	for _, excluded := range opts.Exclude {
+		if excluded == name {
+			return false
+		}
+	}
+
+	// If targets are specified, check if this block is targeted
+	if len(opts.Target) > 0 {
+		for _, target := range opts.Target {
+			if target == name {
+				// Explicitly targeted - run even if enabled=false
+				return true
+			}
+		}
+		// Not in target list
+		return false
+	}
+
+	// No target filter - use enabled state (default: true)
+	return block.IsEnabled()
+}
+
 // Reconcile processes the configuration and syncs secrets to Vault.
 func (e *Engine) Reconcile(ctx context.Context, cfg *config.Config, opts Options) (*Result, error) {
 	result := &Result{
@@ -99,6 +140,12 @@ func (e *Engine) Reconcile(ctx context.Context, cfg *config.Config, opts Options
 	}
 
 	for name, block := range cfg.Secrets {
+		// Apply filtering
+		if !shouldProcessBlock(block, opts) {
+			e.logger.Debug("skipping block", "name", name, "enabled", block.IsEnabled())
+			continue
+		}
+
 		blockDiff, errors := e.processBlock(ctx, name, block, opts)
 		result.Diff.Blocks = append(result.Diff.Blocks, blockDiff)
 		result.Errors = append(result.Errors, errors...)

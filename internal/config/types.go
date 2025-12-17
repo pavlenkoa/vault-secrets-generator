@@ -145,8 +145,21 @@ type SecretBlock struct {
 	// Prune deletes keys in Vault that are not defined in config
 	Prune bool
 
+	// Enabled controls whether this secret block is processed (default: true)
+	// When false, the block is skipped unless explicitly targeted via --target flag
+	Enabled *bool
+
 	// Content contains secret key-value pairs (moved from direct attributes in v1.x)
 	Content map[string]Value
+}
+
+// IsEnabled returns true if this secret block should be processed.
+// Defaults to true if Enabled is not set.
+func (s *SecretBlock) IsEnabled() bool {
+	if s.Enabled == nil {
+		return true
+	}
+	return *s.Enabled
 }
 
 // FullPath returns the complete Vault path as mount/path.

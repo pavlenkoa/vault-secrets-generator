@@ -483,7 +483,7 @@ spec:
 
 ## Current Status
 
-**Version:** v2.0.0
+**Version:** v2.1.0
 
 ### Implemented Features
 - [x] HCL config parsing with custom functions
@@ -507,9 +507,10 @@ spec:
 - [x] Command execution with multiline output (tested)
 - [x] Homebrew tap (`brew install pavlenkoa/tap/vsg`)
 - [x] **v2.0.0 config structure** with `content {}` block and path interpolation
+- [x] **v2.1.0 Secret filtering**: `enabled` attribute and `--target`/`--exclude` flags
+- [x] **v2.1.0 Config-based delete**: delete command with `--config`, `--target`, `--all`, `--exclude`
 
 ### Planned
-- [ ] **v2.1.0** - Secret filtering and config-based delete (see below)
 - [ ] GCS fetcher
 - [ ] Azure Blob Storage fetcher
 - [ ] Kubernetes auth testing
@@ -846,15 +847,15 @@ Flags:
 
 ### 4. Implementation Checklist
 
-- [ ] Add `Enabled` field to `SecretBlock` in `internal/config/types.go`
-- [ ] Parse `enabled` attribute in `internal/config/hcl.go`
-- [ ] Add `--target` and `--exclude` flags to `apply` command
-- [ ] Add `--target` and `--exclude` flags to `diff` command
-- [ ] Implement filtering logic in engine
-- [ ] Add config mode to `delete` command with `--target`, `--all`, `--exclude`
-- [ ] Add validation for mutually exclusive modes
-- [ ] Update tests
-- [ ] Update README.md and examples
+- [x] Add `Enabled` field to `SecretBlock` in `internal/config/types.go`
+- [x] Parse `enabled` attribute in `internal/config/hcl.go`
+- [x] Add `--target` and `--exclude` flags to `apply` command
+- [x] Add `--target` and `--exclude` flags to `diff` command
+- [x] Implement filtering logic in engine
+- [x] Add config mode to `delete` command with `--target`, `--all`, `--exclude`
+- [x] Add validation for mutually exclusive modes
+- [x] Update tests
+- [x] Update README.md and examples
 
 ## Planned Feature: Password Hashing Functions
 

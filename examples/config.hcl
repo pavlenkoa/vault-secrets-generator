@@ -138,3 +138,15 @@ secret "prod-database" {
     host     = "prod-db.internal"
   }
 }
+
+# Disabled secret - won't be processed unless explicitly targeted
+# Use: vsg apply --config config.hcl --target legacy-app
+secret "legacy-app" {
+  enabled = false  # Skip this secret by default
+  path    = "legacy/app"
+
+  content {
+    api_key = generate()
+    note    = "This secret is disabled by default"
+  }
+}

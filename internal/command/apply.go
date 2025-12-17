@@ -14,8 +14,10 @@ import (
 )
 
 var (
-	applyDryRun bool
-	applyForce  bool
+	applyDryRun  bool
+	applyForce   bool
+	applyTarget  []string
+	applyExclude []string
 )
 
 var applyCmd = &cobra.Command{
@@ -30,7 +32,9 @@ For each secret defined in the configuration:
 - Commands are executed and output captured
 - Static values are used as-is
 
-Use --dry-run to see what changes would be made without applying them.`,
+Use --dry-run to see what changes would be made without applying them.
+Use --target to apply specific secrets by label.
+Use --exclude to skip specific secrets by label.`,
 	Example: `  # Apply all secrets
   vsg apply --config config.hcl
 
@@ -41,7 +45,15 @@ Use --dry-run to see what changes would be made without applying them.`,
   vsg apply --config config.hcl --dry-run
 
   # Force regeneration of generated secrets
-  vsg apply --config config.hcl --force`,
+  vsg apply --config config.hcl --force
+
+  # Apply specific secrets by label
+  vsg apply --config config.hcl --target prod-app
+  vsg apply --config config.hcl -t prod-app -t prod-db
+
+  # Apply all except specific secrets
+  vsg apply --config config.hcl --exclude broken-secret
+  vsg apply --config config.hcl -e broken -e legacy`,
 	RunE: runApply,
 }
 
@@ -50,6 +62,8 @@ func init() {
 
 	applyCmd.Flags().BoolVar(&applyDryRun, "dry-run", false, "show what would be done without making changes")
 	applyCmd.Flags().BoolVar(&applyForce, "force", false, "force regeneration of generated secrets")
+	applyCmd.Flags().StringSliceVarP(&applyTarget, "target", "t", nil, "target specific secrets by label (comma-separated or repeated)")
+	applyCmd.Flags().StringSliceVarP(&applyExclude, "exclude", "e", nil, "exclude secrets by label (comma-separated or repeated)")
 }
 
 func runApply(cmd *cobra.Command, args []string) error {
@@ -93,8 +107,10 @@ func runApply(cmd *cobra.Command, args []string) error {
 
 	// Run reconciliation
 	opts := engine.Options{
-		DryRun: applyDryRun,
-		Force:  applyForce,
+		DryRun:  applyDryRun,
+		Force:   applyForce,
+		Target:  applyTarget,
+		Exclude: applyExclude,
 	}
 
 	result, err := eng.Reconcile(ctx, cfg, opts)
