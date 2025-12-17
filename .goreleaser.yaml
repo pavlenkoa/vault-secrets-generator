@@ -66,10 +66,7 @@ changelog:
   use: git
   filters:
     exclude:
-      - "^docs:"
       - "^test:"
-      - "^chore:"
-      - "^ci:"
       - "(?i)^.*planned feature.*$"
       - "(?i)^.*implementation plan.*$"
       - Merge pull request
@@ -79,17 +76,20 @@ changelog:
       regexp: "(?i)^.*breaking.*$"
       order: 0
     - title: Features
-      regexp: "(?i)^.*(feat|implement|add(?!.*plan)).*$"
+      regexp: "(?i)^.*(feat:|implement|add(?!.*plan)).*$"
       order: 1
     - title: Bug Fixes
-      regexp: "(?i)^.*(fix|bugfix).*$"
+      regexp: "(?i)^.*(fix:|bugfix).*$"
       order: 2
-    - title: Infrastructure
-      regexp: "(?i)^.*(update.*version|update.*depend|upgrade).*$"
+    - title: Dependencies
+      regexp: "(?i)^.*(update.*depend|upgrade|bump).*$"
       order: 3
-    - title: Documentation
-      regexp: "(?i)^.*(document|readme|claude\\.md).*$"
+    - title: Infrastructure
+      regexp: "(?i)^.*(update.*go|update.*version|dockerfile|docker|helm|ci:|chore:).*$"
       order: 4
+    - title: Documentation
+      regexp: "(?i)^.*(docs:|document|readme).*$"
+      order: 5
     - title: Other
       order: 999
 

@@ -425,17 +425,20 @@ github.com/Azure/azure-sdk-for-go/sdk/storage/azblob  # Azure Blob access
 
 Use these prefixes for proper release note categorization:
 
-| Prefix | Use for | Example |
-|--------|---------|---------|
-| `feat:` | New features | `feat: add password hashing functions` |
-| `fix:` | Bug fixes | `fix: correct KV v2 path resolution` |
-| `docs:` | Documentation only | `docs: update README examples` |
-| `refactor:` | Code changes that don't add features or fix bugs | `refactor: simplify config parsing` |
-| `test:` | Adding/updating tests | `test: add integration tests for S3` |
-| `chore:` | Maintenance tasks | `chore: update dependencies` |
-| `ci:` | CI/CD changes | `ci: add arm64 builds` |
+| Prefix | Use for | Release Section |
+|--------|---------|-----------------|
+| `feat:` | New features | Features |
+| `fix:` | Bug fixes | Bug Fixes |
+| `docs:` | Documentation only | Documentation |
+| `refactor:` | Code refactoring | Other |
+| `test:` | Adding/updating tests | *excluded* |
+| `chore:` | Maintenance tasks | Infrastructure |
+| `ci:` | CI/CD changes | Infrastructure |
 
-Commits with `docs:`, `test:`, `chore:`, `ci:` prefixes are excluded from release notes.
+**Special patterns:**
+- "Update dependencies" / "bump" → Dependencies section
+- "Update Go" / Dockerfile / Helm → Infrastructure section
+- "breaking" anywhere → ⚠️ Breaking Changes section
 
 ## Example Usage in Kubernetes
 
