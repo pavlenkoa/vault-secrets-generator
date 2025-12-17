@@ -510,70 +510,17 @@ vsg apply --var AWS_REGION=us-west-2 --var ENV=prod
 | 3 | Source file fetch error |
 | 4 | Partial failure (some secrets failed) |
 
-## Kubernetes Usage
+## Kubernetes Deployment
 
-Example CronJob for periodic secret sync:
-
-```yaml
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: vsg-sync
-spec:
-  schedule: "*/10 * * * *"
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          serviceAccountName: vsg
-          containers:
-            - name: vsg
-              image: ghcr.io/pavlenkoa/vault-secrets-generator:latest
-              args: ["apply", "--config", "/etc/config/secrets.hcl"]
-              env:
-                - name: VAULT_ADDR
-                  value: "http://vault.vault:8200"
-                - name: ENV
-                  value: "prod"
-              volumeMounts:
-                - name: config
-                  mountPath: /etc/config
-          volumes:
-            - name: config
-              configMap:
-                name: vsg-config
-          restartPolicy: OnFailure
-```
-
-## Helm Chart
-
-A Helm chart is available for easy Kubernetes deployment:
-
-```bash
-helm install vsg ./helm/vault-secrets-generator \
-  --set config.inline.vault.address=https://vault.example.com \
-  --set auth.kubernetes.role=vsg
-```
-
-See [helm/vault-secrets-generator/values.yaml](helm/vault-secrets-generator/values.yaml) for all options.
+A Helm chart is available at [helm/vault-secrets-generator](helm/vault-secrets-generator/). See [values.yaml](helm/vault-secrets-generator/values.yaml) for configuration options.
 
 ## Development
-
-### Running Tests
 
 ```bash
 go test ./...
 ```
 
-### Running Integration Tests
-
-Integration tests require a running Vault server:
-
-```bash
-export VAULT_ADDR="https://vault.example.com"
-export VAULT_TOKEN="hvs.xxxxx"
-go test ./... -v
-```
+Integration tests require `VAULT_ADDR` and `VAULT_TOKEN` environment variables.
 
 ## License
 
