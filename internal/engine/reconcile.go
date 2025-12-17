@@ -118,26 +118,24 @@ func (e *Engine) Reconcile(ctx context.Context, cfg *config.Config, opts Options
 func (e *Engine) processBlock(ctx context.Context, name string, block config.SecretBlock, opts Options) (BlockDiff, []BlockError) {
 	blockDiff := BlockDiff{
 		Name:  name,
+		Mount: block.Mount,
 		Path:  block.Path,
 		Prune: block.Prune,
 	}
 	var errors []BlockError
 
-	e.logger.Debug("processing block", "name", name, "path", block.Path, "prune", block.Prune)
+	e.logger.Debug("processing block", "name", name, "mount", block.Mount, "path", block.Path, "prune", block.Prune)
 
-	// Parse mount and subpath from block.Path
-	mount, subpath := parsePath(block.Path)
-
-	// Create KV client for this block
+	// Create KV client for this block using mount directly
 	version := vault.KVVersion(block.Version)
-	kv, err := vault.NewKVClient(e.vaultClient, mount, version)
+	kv, err := vault.NewKVClient(e.vaultClient, block.Mount, version)
 	if err != nil {
 		errors = append(errors, BlockError{Block: name, Err: fmt.Errorf("creating KV client: %w", err)})
 		return blockDiff, errors
 	}
 
-	// Read current secrets from Vault
-	current, err := kv.Read(ctx, subpath)
+	// Read current secrets from Vault using path directly
+	current, err := kv.Read(ctx, block.Path)
 	if err != nil {
 		errors = append(errors, BlockError{Block: name, Err: fmt.Errorf("reading current secrets: %w", err)})
 		return blockDiff, errors
@@ -152,11 +150,11 @@ func (e *Engine) processBlock(ctx context.Context, name string, block config.Sec
 		currentStrings[k] = fmt.Sprintf("%v", v)
 	}
 
-	// Resolve desired values
+	// Resolve desired values from Content (v2.0 structure)
 	desired := make(map[string]string)
 	sources := make(map[string]ValueSource)
 
-	for key, value := range block.Data {
+	for key, value := range block.Content {
 		existingValue := currentStrings[key]
 
 		resolved, err := e.resolver.Resolve(ctx, value, existingValue, opts.Force)
@@ -219,9 +217,9 @@ func (e *Engine) applyChanges(ctx context.Context, cfg *config.Config, diff *Dif
 
 		block, ok := cfg.Secrets[blockDiff.Name]
 		if !ok {
-			// Try to find by path (for secrets keyed by path)
+			// Try to find by mount+path combination
 			for _, b := range cfg.Secrets {
-				if b.Path == blockDiff.Path {
+				if b.Mount == blockDiff.Mount && b.Path == blockDiff.Path {
 					block = b
 					ok = true
 					break
@@ -232,10 +230,10 @@ func (e *Engine) applyChanges(ctx context.Context, cfg *config.Config, diff *Dif
 			continue
 		}
 
-		mount, subpath := parsePath(block.Path)
+		// Use mount and path directly from block
 		version := vault.KVVersion(block.Version)
 
-		kv, err := vault.NewKVClient(e.vaultClient, mount, version)
+		kv, err := vault.NewKVClient(e.vaultClient, block.Mount, version)
 		if err != nil {
 			errors = append(errors, BlockError{Block: blockDiff.Name, Err: fmt.Errorf("creating KV client: %w", err)})
 			continue
@@ -259,12 +257,13 @@ func (e *Engine) applyChanges(ctx context.Context, cfg *config.Config, diff *Dif
 		// Write to Vault
 		e.logger.Info("writing secrets to vault",
 			"block", blockDiff.Name,
-			"path", blockDiff.Path,
+			"mount", block.Mount,
+			"path", block.Path,
 			"keys", len(data),
 			"prune", blockDiff.Prune,
 		)
 
-		if err := kv.Write(ctx, subpath, data); err != nil {
+		if err := kv.Write(ctx, block.Path, data); err != nil {
 			errors = append(errors, BlockError{Block: blockDiff.Name, Err: fmt.Errorf("writing to vault: %w", err)})
 		}
 	}

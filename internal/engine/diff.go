@@ -33,9 +33,18 @@ type SecretChange struct {
 // BlockDiff represents changes to a secret block.
 type BlockDiff struct {
 	Name    string         `json:"name"`
+	Mount   string         `json:"mount"`
 	Path    string         `json:"path"`
 	Prune   bool           `json:"prune,omitempty"`
 	Changes []SecretChange `json:"changes"`
+}
+
+// FullPath returns the complete Vault path as mount/path.
+func (b *BlockDiff) FullPath() string {
+	if b.Path == "" {
+		return b.Mount
+	}
+	return b.Mount + "/" + b.Path
 }
 
 // Diff represents all changes across all blocks.
@@ -154,7 +163,7 @@ func FormatDiff(diff *Diff) string {
 	var sb strings.Builder
 
 	for _, block := range diff.Blocks {
-		header := fmt.Sprintf("\n=== %s (%s)", block.Name, block.Path)
+		header := fmt.Sprintf("\n=== %s (%s)", block.Name, block.FullPath())
 		if block.Prune {
 			header += " [prune]"
 		}
@@ -188,7 +197,7 @@ func FormatDiffVerbose(diff *Diff) string {
 	var sb strings.Builder
 
 	for _, block := range diff.Blocks {
-		header := fmt.Sprintf("\n=== %s (%s)", block.Name, block.Path)
+		header := fmt.Sprintf("\n=== %s (%s)", block.Name, block.FullPath())
 		if block.Prune {
 			header += " [prune]"
 		}

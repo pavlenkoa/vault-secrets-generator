@@ -70,7 +70,7 @@ vault-secrets-generator/
 
 ## Configuration Format
 
-The tool uses a declarative HCL configuration:
+The tool uses a declarative HCL configuration (v2.0 format):
 
 ```hcl
 vault {
@@ -83,6 +83,9 @@ vault {
 }
 
 defaults {
+  mount   = "secret"   # default mount if not specified per-secret
+  version = 2          # KV version: 1 or 2, auto-detect if omitted
+
   strategy {
     generate = "create"
     json     = "update"
@@ -102,19 +105,23 @@ defaults {
   }
 }
 
-secret "secret/dev/app" {
-  prune       = true
-  api_key     = generate()
-  jwt_secret  = generate({length = 64, symbols = 0})
-  db_host     = json("s3://bucket/dev/terraform.tfstate", ".outputs.db_host.value")
-  db_port     = "5432"
-  config_host = yaml("gcs://bucket/config.yaml", ".database.host")
-  ssh_key     = raw("s3://bucket/keys/deploy.pem")
-  shared_key  = vault("secret/shared", "api_key")
-  caddy_hash  = command("caddy hash-password --plaintext mypassword")
+secret "dev-app" {
+  path  = "${env(\"ENV\")}/app"  # path supports interpolation
+  prune = true
 
-  # Per-key strategy override
-  special     = generate({length = 64, strategy = "update"})
+  content {
+    api_key     = generate()
+    jwt_secret  = generate({length = 64, symbols = 0})
+    db_host     = json("s3://bucket/dev/terraform.tfstate", ".outputs.db_host.value")
+    db_port     = "5432"
+    config_host = yaml("gcs://bucket/config.yaml", ".database.host")
+    ssh_key     = raw("s3://bucket/keys/deploy.pem")
+    shared_key  = vault("secret/shared", "api_key")
+    caddy_hash  = command("caddy hash-password --plaintext mypassword")
+
+    # Per-key strategy override
+    special     = generate({length = 64, strategy = "update"})
+  }
 }
 ```
 
@@ -455,27 +462,9 @@ spec:
 - Webhooks or event-driven sync
 - Web UI
 
-## Known Limitations
-
-### No Template Interpolation in Secret Paths
-
-HCL block labels (the secret path) do not support `${...}` template interpolation. This is a limitation of the HCL parser itself - template sequences are rejected during parsing.
-
-**Does NOT work:**
-```hcl
-# This will fail with: "Template sequences are not allowed in this string"
-secret "kv/${env("ENV")}/app" {
-  api_key = generate()
-}
-```
-
-**Workaround:** Use hardcoded paths for now.
-
-**Planned fix:** The [v2.0.0 release](#v200-implementation-plan) will solve this by moving the path to an attribute inside a `content {}` block, where interpolation works natively.
-
 ## Current Status
 
-**Version:** v1.0.3
+**Version:** v2.0.0
 
 ### Implemented Features
 - [x] HCL config parsing with custom functions
@@ -498,13 +487,13 @@ secret "kv/${env("ENV")}/app" {
 - [x] goreleaser configuration with auto-release
 - [x] Command execution with multiline output (tested)
 - [x] Homebrew tap (`brew install pavlenkoa/tap/vsg`)
+- [x] **v2.0.0 config structure** with `content {}` block and path interpolation
 
 ### Planned
-- [ ] **v2.0.0 release** - new config structure with `content {}` block (see below) - **next**
 - [ ] GCS fetcher
 - [ ] Azure Blob Storage fetcher
-- [ ] Kubernetes auth
-- [ ] AppRole auth
+- [ ] Kubernetes auth testing
+- [ ] AppRole auth testing
 - [ ] Password hashing functions with referential values (see below)
 
 ## v2.0.0 Implementation Plan
@@ -613,17 +602,16 @@ Example with `mount = "secret"`, `path = "prod/app"`:
 
 ### 6. Implementation Checklist
 
-- [ ] Update `internal/config/types.go` - add `Mount` to `Defaults` and `SecretBlock`, rename `Data` to `Content`
-- [ ] Update `internal/config/hcl.go` - parse new structure with `content {}` block
-- [ ] Update `internal/engine/reconcile.go` - use mount + path for Vault operations
-- [ ] Update `internal/engine/diff.go` - update diff logic for new structure
-- [ ] Update `internal/vault/client.go` - separate mount from path in API calls
-- [ ] Update tests for new config structure
-- [ ] Update `CLAUDE.md` with new config examples
-- [ ] Update `README.md` with new config examples
+- [x] Update `internal/config/types.go` - add `Mount` to `Defaults` and `SecretBlock`, rename `Data` to `Content`
+- [x] Update `internal/config/hcl.go` - parse new structure with `content {}` block
+- [x] Update `internal/engine/reconcile.go` - use mount + path for Vault operations
+- [x] Update `internal/engine/diff.go` - update diff logic for new structure
+- [x] Update tests for new config structure
+- [x] Update `CLAUDE.md` with new config examples
+- [x] Update `README.md` with new config examples
+- [x] Update `examples/config.hcl`
 - [ ] Create `docs/migration-from-terraform.md`
-- [ ] Update `examples/config.hcl`
-- [ ] Bump version to v2.0.0
+- [ ] Bump version to v2.0.0 (tag release)
 
 ### 7. Important Implementation Notes
 

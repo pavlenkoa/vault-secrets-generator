@@ -41,17 +41,21 @@ func TestIntegration_Reconcile(t *testing.T) {
 
 	// Create engine with config.Defaults
 	defaults := config.Defaults{
+		Mount:    "kv",
 		Strategy: config.DefaultStrategyDefaults(),
 		Generate: config.DefaultPasswordPolicy(),
 	}
 	engine := NewEngine(vaultClient, registry, defaults, nil)
 
-	// Create test config
+	// Create test config using v2.0 structure
 	cfg := &config.Config{
+		Defaults: defaults,
 		Secrets: map[string]config.SecretBlock{
-			"kv/vsg-integration-test": {
-				Path: "kv/vsg-integration-test",
-				Data: map[string]config.Value{
+			"integration-test": {
+				Name:  "integration-test",
+				Mount: "kv",
+				Path:  "vsg-integration-test",
+				Content: map[string]config.Value{
 					"static_value": {
 						Type:   config.ValueTypeStatic,
 						Static: "hello-world",
@@ -149,16 +153,20 @@ func TestIntegration_ReconcileWithForce(t *testing.T) {
 
 	registry := fetcher.NewRegistry()
 	defaults := config.Defaults{
+		Mount:    "kv",
 		Strategy: config.DefaultStrategyDefaults(),
 		Generate: config.DefaultPasswordPolicy(),
 	}
 	engine := NewEngine(vaultClient, registry, defaults, nil)
 
 	cfg := &config.Config{
+		Defaults: defaults,
 		Secrets: map[string]config.SecretBlock{
-			"kv/vsg-force-test": {
-				Path: "kv/vsg-force-test",
-				Data: map[string]config.Value{
+			"force-test": {
+				Name:  "force-test",
+				Mount: "kv",
+				Path:  "vsg-force-test",
+				Content: map[string]config.Value{
 					"password": {
 						Type: config.ValueTypeGenerate,
 						Generate: &config.PasswordPolicy{
@@ -217,25 +225,31 @@ func TestIntegration_ReconcileMultipleBlocks(t *testing.T) {
 
 	registry := fetcher.NewRegistry()
 	defaults := config.Defaults{
+		Mount:    "kv",
 		Strategy: config.DefaultStrategyDefaults(),
 		Generate: config.DefaultPasswordPolicy(),
 	}
 	engine := NewEngine(vaultClient, registry, defaults, nil)
 
 	cfg := &config.Config{
+		Defaults: defaults,
 		Secrets: map[string]config.SecretBlock{
-			"kv/vsg-multi-test-1": {
-				Path: "kv/vsg-multi-test-1",
-				Data: map[string]config.Value{
+			"multi-test-1": {
+				Name:  "multi-test-1",
+				Mount: "kv",
+				Path:  "vsg-multi-test-1",
+				Content: map[string]config.Value{
 					"key": {
 						Type:   config.ValueTypeStatic,
 						Static: "value1",
 					},
 				},
 			},
-			"kv/vsg-multi-test-2": {
-				Path: "kv/vsg-multi-test-2",
-				Data: map[string]config.Value{
+			"multi-test-2": {
+				Name:  "multi-test-2",
+				Mount: "kv",
+				Path:  "vsg-multi-test-2",
+				Content: map[string]config.Value{
 					"key": {
 						Type:   config.ValueTypeStatic,
 						Static: "value2",

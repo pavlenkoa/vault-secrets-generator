@@ -81,6 +81,12 @@ func DefaultStrategyDefaults() StrategyDefaults {
 
 // Defaults contains default settings.
 type Defaults struct {
+	// Mount is the default KV mount path (default: "secret")
+	Mount string
+
+	// Version is the default KV engine version (1 or 2, auto-detect if 0)
+	Version int
+
 	// Strategy contains default strategies per value type
 	Strategy StrategyDefaults
 
@@ -124,7 +130,13 @@ func DefaultPasswordPolicy() PasswordPolicy {
 
 // SecretBlock represents a group of secrets at a Vault path.
 type SecretBlock struct {
-	// Path is the Vault path
+	// Name is the block label/identifier (for display and lookup)
+	Name string
+
+	// Mount is the KV mount path (defaults to defaults.mount, then "secret")
+	Mount string
+
+	// Path is the path within the mount (supports interpolation)
 	Path string
 
 	// Version is the KV engine version (1 or 2, auto-detected if not set)
@@ -133,8 +145,16 @@ type SecretBlock struct {
 	// Prune deletes keys in Vault that are not defined in config
 	Prune bool
 
-	// Data contains secret key-value pairs
-	Data map[string]Value
+	// Content contains secret key-value pairs (moved from direct attributes in v1.x)
+	Content map[string]Value
+}
+
+// FullPath returns the complete Vault path as mount/path.
+func (s *SecretBlock) FullPath() string {
+	if s.Path == "" {
+		return s.Mount
+	}
+	return s.Mount + "/" + s.Path
 }
 
 // ValueType represents the type of a secret value.

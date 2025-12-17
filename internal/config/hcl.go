@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
@@ -53,21 +52,21 @@ func ParseHCL(data []byte, filename string, vars Variables) (*Config, error) {
 
 		case "secret":
 			if len(block.Labels) != 1 {
-				return nil, fmt.Errorf("secret block requires exactly one label (path)")
+				return nil, fmt.Errorf("secret block requires exactly one label (name)")
 			}
-			// Evaluate the path label (may contain env() calls)
-			path, err := evaluateStringWithInterpolation(block.Labels[0], evalCtx)
-			if err != nil {
-				return nil, fmt.Errorf("evaluating secret path %q: %w", block.Labels[0], err)
+			name := block.Labels[0]
+
+			// Check for duplicate names
+			if _, exists := cfg.Secrets[name]; exists {
+				return nil, fmt.Errorf("duplicate secret block name: %q", name)
 			}
 
-			secretBlock, err := parseSecretBlock(block, path, evalCtx)
+			secretBlock, err := parseSecretBlock(block, name, evalCtx)
 			if err != nil {
-				return nil, fmt.Errorf("parsing secret block %q: %w", path, err)
+				return nil, fmt.Errorf("parsing secret block %q: %w", name, err)
 			}
 
-			// Use path as the key (could also use a generated name)
-			cfg.Secrets[path] = *secretBlock
+			cfg.Secrets[name] = *secretBlock
 		}
 	}
 
@@ -87,7 +86,7 @@ var rootSchema = &hcl.BodySchema{
 	Blocks: []hcl.BlockHeaderSchema{
 		{Type: "vault"},
 		{Type: "defaults"},
-		{Type: "secret", LabelNames: []string{"path"}},
+		{Type: "secret", LabelNames: []string{"name"}},
 	},
 }
 
@@ -475,6 +474,10 @@ func parseDefaultsBlock(block *hcl.Block, evalCtx *hcl.EvalContext) (*Defaults, 
 	}
 
 	content, diags := block.Body.Content(&hcl.BodySchema{
+		Attributes: []hcl.AttributeSchema{
+			{Name: "mount"},
+			{Name: "version"},
+		},
 		Blocks: []hcl.BlockHeaderSchema{
 			{Type: "strategy"},
 			{Type: "generate"},
@@ -482,6 +485,25 @@ func parseDefaultsBlock(block *hcl.Block, evalCtx *hcl.EvalContext) (*Defaults, 
 	})
 	if diags.HasErrors() {
 		return nil, fmt.Errorf("%s", diags.Error())
+	}
+
+	// Parse mount attribute (optional, defaults to "secret")
+	if attr, exists := content.Attributes["mount"]; exists {
+		val, diags := attr.Expr.Value(evalCtx)
+		if diags.HasErrors() {
+			return nil, fmt.Errorf("evaluating mount: %s", diags.Error())
+		}
+		defaults.Mount = val.AsString()
+	}
+
+	// Parse version attribute (optional, defaults to 0/auto-detect)
+	if attr, exists := content.Attributes["version"]; exists {
+		val, diags := attr.Expr.Value(evalCtx)
+		if diags.HasErrors() {
+			return nil, fmt.Errorf("evaluating version: %s", diags.Error())
+		}
+		n, _ := val.AsBigFloat().Int64()
+		defaults.Version = int(n)
 	}
 
 	for _, innerBlock := range content.Blocks {
@@ -620,55 +642,104 @@ func parseGenerateBlock(block *hcl.Block, evalCtx *hcl.EvalContext) (*PasswordPo
 	return &policy, nil
 }
 
-// parseSecretBlock parses a secret block
-func parseSecretBlock(block *hcl.Block, path string, evalCtx *hcl.EvalContext) (*SecretBlock, error) {
+// secretBlockSchema defines the schema for secret blocks (v2.0 format)
+var secretBlockSchema = &hcl.BodySchema{
+	Attributes: []hcl.AttributeSchema{
+		{Name: "mount"},
+		{Name: "path", Required: true},
+		{Name: "version"},
+		{Name: "prune"},
+	},
+	Blocks: []hcl.BlockHeaderSchema{
+		{Type: "content"},
+	},
+}
+
+// parseSecretBlock parses a secret block (v2.0 format with content {} block)
+func parseSecretBlock(block *hcl.Block, name string, evalCtx *hcl.EvalContext) (*SecretBlock, error) {
 	secret := &SecretBlock{
-		Path: path,
-		Data: make(map[string]Value),
+		Name:    name,
+		Content: make(map[string]Value),
 	}
 
-	// Get all attributes (we handle them dynamically)
-	attrs, diags := block.Body.JustAttributes()
-	if diags.HasErrors() {
-		return nil, fmt.Errorf("%s", diags.Error())
+	bodyContent, bodyDiags := block.Body.Content(secretBlockSchema)
+	if bodyDiags.HasErrors() {
+		return nil, fmt.Errorf("%s", bodyDiags.Error())
 	}
 
-	for name, attr := range attrs {
-		// Handle special attributes
-		switch name {
-		case "prune":
-			val, diags := attr.Expr.Value(evalCtx)
-			if diags.HasErrors() {
-				return nil, fmt.Errorf("evaluating prune: %s", diags.Error())
-			}
-			secret.Prune = val.True()
-			continue
-
-		case "version":
-			val, diags := attr.Expr.Value(evalCtx)
-			if diags.HasErrors() {
-				return nil, fmt.Errorf("evaluating version: %s", diags.Error())
-			}
-			// Only treat as KV version if it's a number, otherwise treat as data key
-			if val.Type() == cty.Number {
-				n, _ := val.AsBigFloat().Int64()
-				secret.Version = int(n)
-				continue
-			}
-			// Fall through to treat as a data key
+	// Parse mount attribute (optional)
+	if attr, exists := bodyContent.Attributes["mount"]; exists {
+		val, valDiags := attr.Expr.Value(evalCtx)
+		if valDiags.HasErrors() {
+			return nil, fmt.Errorf("evaluating mount: %s", valDiags.Error())
 		}
+		secret.Mount = val.AsString()
+	}
 
-		// All other attributes are secret data keys
-		val, diags := attr.Expr.Value(evalCtx)
-		if diags.HasErrors() {
-			return nil, fmt.Errorf("evaluating %s: %s", name, diags.Error())
+	// Parse path attribute (required)
+	if attr, exists := bodyContent.Attributes["path"]; exists {
+		val, valDiags := attr.Expr.Value(evalCtx)
+		if valDiags.HasErrors() {
+			return nil, fmt.Errorf("evaluating path: %s", valDiags.Error())
+		}
+		secret.Path = val.AsString()
+	}
+
+	// Parse version attribute (optional)
+	if attr, exists := bodyContent.Attributes["version"]; exists {
+		val, valDiags := attr.Expr.Value(evalCtx)
+		if valDiags.HasErrors() {
+			return nil, fmt.Errorf("evaluating version: %s", valDiags.Error())
+		}
+		n, _ := val.AsBigFloat().Int64()
+		secret.Version = int(n)
+	}
+
+	// Parse prune attribute (optional)
+	if attr, exists := bodyContent.Attributes["prune"]; exists {
+		val, valDiags := attr.Expr.Value(evalCtx)
+		if valDiags.HasErrors() {
+			return nil, fmt.Errorf("evaluating prune: %s", valDiags.Error())
+		}
+		secret.Prune = val.True()
+	}
+
+	// Parse content block (required)
+	var contentBlock *hcl.Block
+	for _, b := range bodyContent.Blocks {
+		if b.Type == "content" {
+			if contentBlock != nil {
+				return nil, fmt.Errorf("only one content block allowed per secret")
+			}
+			contentBlock = b
+		}
+	}
+
+	if contentBlock == nil {
+		return nil, fmt.Errorf("content block is required")
+	}
+
+	// Parse all attributes in the content block as secret key-value pairs
+	contentAttrs, attrDiags := contentBlock.Body.JustAttributes()
+	if attrDiags.HasErrors() {
+		return nil, fmt.Errorf("parsing content block: %s", attrDiags.Error())
+	}
+
+	for keyName, attr := range contentAttrs {
+		val, valDiags := attr.Expr.Value(evalCtx)
+		if valDiags.HasErrors() {
+			return nil, fmt.Errorf("evaluating %s: %s", keyName, valDiags.Error())
 		}
 
 		value, err := ctyValueToValue(val)
 		if err != nil {
-			return nil, fmt.Errorf("converting %s: %w", name, err)
+			return nil, fmt.Errorf("converting %s: %w", keyName, err)
 		}
-		secret.Data[name] = value
+		secret.Content[keyName] = value
+	}
+
+	if len(secret.Content) == 0 {
+		return nil, fmt.Errorf("content block must contain at least one key")
 	}
 
 	return secret, nil
@@ -760,29 +831,13 @@ func ctyValueToValue(val cty.Value) (Value, error) {
 	return Value{}, fmt.Errorf("unsupported value type: %s", val.Type().FriendlyName())
 }
 
-// evaluateStringWithInterpolation evaluates a string that may contain ${...} expressions
-func evaluateStringWithInterpolation(s string, evalCtx *hcl.EvalContext) (string, error) {
-	// Check if string contains interpolation
-	if !strings.Contains(s, "${") {
-		return s, nil
-	}
-
-	// Parse as HCL template
-	expr, diags := hclsyntax.ParseTemplate([]byte(s), "", hcl.Pos{Line: 1, Column: 1})
-	if diags.HasErrors() {
-		return "", fmt.Errorf("parsing template: %s", diags.Error())
-	}
-
-	val, diags := expr.Value(evalCtx)
-	if diags.HasErrors() {
-		return "", fmt.Errorf("evaluating template: %s", diags.Error())
-	}
-
-	return val.AsString(), nil
-}
-
 // applyDefaults applies default values to the config
 func applyDefaults(cfg *Config) {
+	// Apply default mount if not set
+	if cfg.Defaults.Mount == "" {
+		cfg.Defaults.Mount = "secret"
+	}
+
 	// Apply strategy defaults if not set
 	if cfg.Defaults.Strategy == (StrategyDefaults{}) {
 		cfg.Defaults.Strategy = DefaultStrategyDefaults()
@@ -805,6 +860,19 @@ func applyDefaults(cfg *Config) {
 	if cfg.Defaults.Generate.AllowRepeat == nil {
 		cfg.Defaults.Generate.AllowRepeat = defaults.AllowRepeat
 	}
+
+	// Apply defaults to each secret block
+	for name, block := range cfg.Secrets {
+		// Apply default mount
+		if block.Mount == "" {
+			block.Mount = cfg.Defaults.Mount
+		}
+		// Apply default version (0 means auto-detect)
+		if block.Version == 0 && cfg.Defaults.Version != 0 {
+			block.Version = cfg.Defaults.Version
+		}
+		cfg.Secrets[name] = block
+	}
 }
 
 // validate validates the configuration
@@ -826,21 +894,31 @@ func validate(cfg *Config) error {
 		}
 	}
 
+	// Track mount+path combinations for uniqueness check
+	fullPaths := make(map[string]string) // fullPath -> block name
+
 	for name, block := range cfg.Secrets {
 		if block.Path == "" {
 			return fmt.Errorf("secret %q: path is required", name)
 		}
 
-		if len(block.Data) == 0 {
-			return fmt.Errorf("secret %q: no data defined", name)
+		if len(block.Content) == 0 {
+			return fmt.Errorf("secret %q: content block must contain at least one key", name)
 		}
 
 		if block.Version != 0 && block.Version != 1 && block.Version != 2 {
 			return fmt.Errorf("secret %q: version must be 1 or 2 (or 0 for auto)", name)
 		}
 
+		// Check for unique mount+path combinations
+		fullPath := block.FullPath()
+		if existingName, exists := fullPaths[fullPath]; exists {
+			return fmt.Errorf("secret %q: duplicate path %q (already defined by %q)", name, fullPath, existingName)
+		}
+		fullPaths[fullPath] = name
+
 		// Validate generate policies
-		for key, val := range block.Data {
+		for key, val := range block.Content {
 			if val.Type == ValueTypeGenerate && val.Generate != nil {
 				policy := val.Generate
 				if policy.Length > 0 && policy.Length < 1 {

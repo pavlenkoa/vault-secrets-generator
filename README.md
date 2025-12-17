@@ -5,6 +5,7 @@ A lightweight, cloud-agnostic CLI tool that generates and populates secrets in H
 ## Features
 
 - **HCL Configuration**: Declarative HCL-based configuration with custom functions
+- **Dynamic Paths**: Use `${env("VAR")}` interpolation in secret paths
 - **Remote File Integration**: Extract values from JSON/YAML files stored in S3, GCS, or local filesystem
 - **Password Generation**: Generate secure passwords with configurable policies
 - **Command Execution**: Generate values by running shell commands
@@ -49,15 +50,23 @@ vault {
   }
 }
 
-secret "secret/dev/database" {
-  host     = json("s3://terraform-state/dev/rds.tfstate", ".outputs.endpoint.value")
-  password = generate()
-  port     = "5432"
+secret "dev-database" {
+  path = "dev/database"
+
+  content {
+    host     = json("s3://terraform-state/dev/rds.tfstate", ".outputs.endpoint.value")
+    password = generate()
+    port     = "5432"
+  }
 }
 
-secret "secret/dev/app" {
-  api_key     = generate()
-  environment = "dev"
+secret "dev-app" {
+  path = "dev/app"
+
+  content {
+    api_key     = generate()
+    environment = "dev"
+  }
 }
 ```
 
@@ -160,6 +169,37 @@ vsg version
 
 ## Configuration
 
+### Secret Block Structure
+
+Each secret block defines a group of key-value pairs to write to a single Vault path:
+
+```hcl
+secret "<name>" {
+  mount   = "secret"           # Optional: KV mount path (default: from defaults.mount)
+  path    = "myapp/config"     # Required: Path within the mount
+  version = 2                  # Optional: KV version 1 or 2 (default: auto-detect)
+  prune   = false              # Optional: Delete unmanaged keys (default: false)
+
+  content {
+    # Key-value pairs go here
+    api_key  = generate()
+    db_host  = "localhost"
+  }
+}
+```
+
+The `path` attribute supports interpolation:
+
+```hcl
+secret "app" {
+  path = "${env("ENV")}/app"  # Becomes "prod/app" when ENV=prod
+
+  content {
+    key = "value"
+  }
+}
+```
+
 ### Full Example
 
 ```hcl
@@ -186,6 +226,9 @@ vault {
 
 # Default settings for all secrets
 defaults {
+  mount   = "secret"  # Default KV mount path
+  version = 2         # Default KV version (1, 2, or omit for auto-detect)
+
   # Default strategies per value type
   strategy {
     generate = "create"  # Don't regenerate existing passwords
@@ -207,60 +250,76 @@ defaults {
   }
 }
 
-# Database secrets
-secret "secret/dev/database" {
+# Database secrets with dynamic path
+secret "dev-database" {
+  path  = "${env(\"ENV\")}/database"
   prune = true  # Delete keys in Vault not defined here
 
-  # Extract from Terraform state file in S3
-  host     = json("s3://terraform-state/dev/rds.tfstate", ".outputs.endpoint.value")
-  port     = json("s3://terraform-state/dev/rds.tfstate", ".outputs.port.value")
-  username = json("s3://terraform-state/dev/rds.tfstate", ".outputs.username.value")
+  content {
+    # Extract from Terraform state file in S3
+    host     = json("s3://terraform-state/dev/rds.tfstate", ".outputs.endpoint.value")
+    port     = json("s3://terraform-state/dev/rds.tfstate", ".outputs.port.value")
+    username = json("s3://terraform-state/dev/rds.tfstate", ".outputs.username.value")
 
-  # Generated password - won't regenerate if exists (create strategy)
-  password = generate()
+    # Generated password - won't regenerate if exists (create strategy)
+    password = generate()
 
-  # Static value
-  database = "myapp"
+    # Static value
+    database = "myapp"
+  }
 }
 
-# Application secrets
-secret "secret/dev/app" {
-  # api_key with default policy (32 chars)
-  api_key = generate()
+# Application secrets with custom mount
+secret "dev-app" {
+  mount = "kv"  # Override default mount
+  path  = "dev/app"
 
-  # jwt_secret with custom policy (64 chars, no symbols)
-  jwt_secret = generate({length = 64, symbols = 0})
+  content {
+    # api_key with default policy (32 chars)
+    api_key = generate()
 
-  # webhook_token with custom policy and strategy override
-  webhook_token = generate({length = 48, symbols = 0, strategy = "update"})
+    # jwt_secret with custom policy (64 chars, no symbols)
+    jwt_secret = generate({length = 64, symbols = 0})
 
-  # Copy from another Vault path
-  shared_key = vault("secret/shared", "api_key")
+    # webhook_token with custom policy and strategy override
+    webhook_token = generate({length = 48, symbols = 0, strategy = "update"})
 
-  # From command execution
-  password_hash = command("echo -n 'secret123' | sha256sum | cut -d' ' -f1")
+    # Copy from another Vault path
+    shared_key = vault("secret/shared", "api_key")
 
-  # Environment value from env() function
-  environment = env("ENV")
+    # From command execution
+    password_hash = command("echo -n 'secret123' | sha256sum | cut -d' ' -f1")
 
-  # Static values
-  log_level = "info"
-  version   = "1.2.3"
+    # Environment value from env() function
+    environment = env("ENV")
+
+    # Static values
+    log_level = "info"
+    version   = "1.2.3"
+  }
 }
 
 # SSH keys from raw files
-secret "secret/dev/ssh" {
-  # Raw file content (no extraction)
-  deploy_key = raw("s3://keys/dev/deploy.pem")
+secret "dev-ssh" {
+  path = "dev/ssh"
 
-  # With create strategy - won't update if key exists
-  backup_key = raw("s3://keys/dev/backup.pem", {strategy = "create"})
+  content {
+    # Raw file content (no extraction)
+    deploy_key = raw("s3://keys/dev/deploy.pem")
+
+    # With create strategy - won't update if key exists
+    backup_key = raw("s3://keys/dev/backup.pem", {strategy = "create"})
+  }
 }
 
 # Config extracted from YAML file
-secret "secret/dev/config" {
-  redis_host = yaml("s3://configs/dev/app.yaml", ".redis.host")
-  redis_port = yaml("s3://configs/dev/app.yaml", ".redis.port")
+secret "dev-config" {
+  path = "dev/config"
+
+  content {
+    redis_host = yaml("s3://configs/dev/app.yaml", ".redis.host")
+    redis_port = yaml("s3://configs/dev/app.yaml", ".redis.port")
+  }
 }
 ```
 
@@ -341,8 +400,12 @@ When `prune = true` is set on a secret block, keys in Vault that are not defined
 Use the `env()` function to reference environment variables or CLI variables:
 
 ```hcl
-secret "secret/dev/app" {
-  region = env("AWS_REGION")
+secret "app" {
+  path = "${env(\"ENV\")}/app"  # Dynamic path based on ENV variable
+
+  content {
+    region = env("AWS_REGION")
+  }
 }
 ```
 
@@ -350,10 +413,10 @@ CLI variables override environment variables:
 
 ```bash
 # From environment
-AWS_REGION=us-east-1 vsg apply
+AWS_REGION=us-east-1 ENV=dev vsg apply
 
 # From CLI (overrides environment)
-vsg apply --var AWS_REGION=us-west-2
+vsg apply --var AWS_REGION=us-west-2 --var ENV=prod
 ```
 
 ## Environment Variables
