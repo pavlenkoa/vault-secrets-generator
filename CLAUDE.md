@@ -13,7 +13,7 @@ A lightweight, cloud-agnostic CLI tool that generates and populates secrets in H
 
 ## Tech Stack
 
-- **Language:** Go 1.22+
+- **Language:** Go 1.25+
 - **Target:** Single static binary, minimal dependencies
 - **Container:** Alpine-based, <20MB final image
 
@@ -305,48 +305,12 @@ VSG auto-detects KV v1 vs v2 by querying `/sys/mounts`. User specifies path (e.g
    - Report all errors at end
    - Detailed error messages with context
 
-## Fetcher Interface
+## Vault Authentication
 
-```go
-type Fetcher interface {
-    // Fetch retrieves a file and returns its contents
-    Fetch(ctx context.Context, uri string) ([]byte, error)
-
-    // Supports returns true if this fetcher handles the given URI scheme
-    Supports(uri string) bool
-}
-```
-
-Implementations:
-- `s3://` - AWS S3 (use AWS SDK, support IRSA and standard credential chain)
-- `gcs://` - Google Cloud Storage
-- `az://` - Azure Blob Storage
-- Local filesystem (no scheme)
-
-## Password Generator
-
-```go
-type PasswordPolicy struct {
-    Length           int    // Total length (default: 32)
-    Digits           int    // Minimum digits (default: 5)
-    Symbols          int    // Minimum symbols (default: 5)
-    SymbolCharacters string // Allowed symbols (default: "-_$@")
-    NoUpper          bool   // Exclude uppercase (default: false)
-}
-```
-
-Use `crypto/rand` for secure random generation.
-
-## Vault Client
-
-Support authentication methods:
-1. **Token** - from env `VAULT_TOKEN` or config
-2. **Kubernetes** - service account JWT auth
-3. **AppRole** - role_id/secret_id
-
-Handle both KV v1 and v2:
-- v1: `PUT /secret/path` with `{"key": "value"}`
-- v2: `PUT /secret/data/path` with `{"data": {"key": "value"}}`
+Supported auth methods:
+- **Token** - `VAULT_TOKEN` env var or config
+- **Kubernetes** - ServiceAccount JWT (for pods)
+- **AppRole** - `role_id`/`secret_id` (for CI/CD, non-K8s apps)
 
 ## Environment Variables
 
@@ -361,50 +325,9 @@ AZURE_STORAGE_ACCOUNT           # Azure storage account
 VSG_CONFIG          # Default config file path
 ```
 
-## Dockerfile
+## Testing
 
-```dockerfile
-FROM golang:1.22-alpine AS build
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o vsg .
-
-FROM alpine:3.20
-RUN apk add --no-cache ca-certificates
-COPY --from=build /app/vsg /usr/local/bin/
-ENTRYPOINT ["vsg"]
-```
-
-## Testing Strategy
-
-1. **Unit tests** for each package
-2. **Integration tests** with local Vault dev server
-3. **Mock fetchers** for S3/GCS/Azure in tests
-
-## Dependencies (keep minimal)
-
-```
-github.com/spf13/cobra          # CLI framework
-github.com/hashicorp/hcl/v2     # HCL parser
-github.com/hashicorp/vault/api  # Vault client
-github.com/aws/aws-sdk-go-v2    # S3 access
-cloud.google.com/go/storage     # GCS access
-github.com/Azure/azure-sdk-for-go/sdk/storage/azblob  # Azure Blob access
-```
-
-## Implementation Order
-
-1. **Phase 1:** HCL config parsing with custom functions
-2. **Phase 2:** Password generator
-3. **Phase 3:** Local file fetcher + JSON/YAML parser
-4. **Phase 4:** Vault client (token auth, KV v2)
-5. **Phase 5:** S3 fetcher
-6. **Phase 6:** Reconciliation engine with strategies + dry-run
-7. **Phase 7:** CLI with cobra
-8. **Phase 8:** Additional features (GCS, Azure, command execution, prune)
-9. **Phase 9:** Delete command
+Run tests with `go test ./...`. Integration tests require a running Vault server with `VAULT_ADDR` and `VAULT_TOKEN` set.
 
 ## Code Style
 
@@ -440,38 +363,9 @@ Use these prefixes for proper release note categorization:
 - "Update Go" / Dockerfile / Helm → Infrastructure section
 - "breaking" anywhere → ⚠️ Breaking Changes section
 
-## Example Usage in Kubernetes
+## Kubernetes Deployment
 
-```yaml
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: vsg
-spec:
-  schedule: "*/10 * * * *"
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          serviceAccountName: vsg
-          containers:
-            - name: vsg
-              image: ghcr.io/pavlenkoa/vault-secrets-generator:latest
-              args: ["apply", "--config", "/etc/config/secrets.hcl"]
-              env:
-                - name: VAULT_ADDR
-                  value: "http://vault.vault:8200"
-                - name: ENV
-                  value: "prod"
-              volumeMounts:
-                - name: config
-                  mountPath: /etc/config
-          volumes:
-            - name: config
-              configMap:
-                name: vsg-config
-          restartPolicy: OnFailure
-```
+Helm chart available at `helm/vault-secrets-generator/`. Typically deployed as a Job with Kubernetes auth.
 
 ## Non-Goals (Out of Scope)
 
