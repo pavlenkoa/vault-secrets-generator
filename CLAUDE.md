@@ -675,20 +675,24 @@ Add native password hashing functions that can reference other keys in the same 
 ### Proposed Syntax
 
 ```hcl
-secret "kv/authelia" {
-  # Generate a random password
-  admin_password = generate({length = 32})
+secret "authelia" {
+  path = "authelia"
 
-  # Hash the generated password with argon2id
-  admin_password_hash = argon2({from = "admin_password"})
+  content {
+    # Generate a random password
+    admin_password = generate({length = 32})
 
-  # Generate OIDC client secret and its PBKDF2 hash
-  oidc_client_plaintext = generate({length = 64, symbols = 0})
-  oidc_client_secret = pbkdf2({from = "oidc_client_plaintext", variant = "sha512"})
+    # Hash the generated password with argon2id
+    admin_password_hash = argon2({from = "admin_password"})
 
-  # bcrypt example
-  api_key = generate()
-  api_key_hash = bcrypt({from = "api_key", cost = 12})
+    # Generate OIDC client secret and its PBKDF2 hash
+    oidc_client_plaintext = generate({length = 64, symbols = 0})
+    oidc_client_secret = pbkdf2({from = "oidc_client_plaintext", variant = "sha512"})
+
+    # bcrypt example
+    api_key = generate()
+    api_key_hash = bcrypt({from = "api_key", cost = 12})
+  }
 }
 ```
 
