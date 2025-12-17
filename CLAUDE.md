@@ -471,7 +471,7 @@ secret "kv/${env("ENV")}/app" {
 
 **Workaround:** Use hardcoded paths for now.
 
-**Planned fix:** The [Secret Block Restructure](#planned-feature-secret-block-restructure) feature will solve this by moving the path to an attribute inside a `content {}` block, where interpolation works natively.
+**Planned fix:** The [v2.0.0 release](#v200-implementation-plan) will solve this by moving the path to an attribute inside a `content {}` block, where interpolation works natively.
 
 ## Current Status
 
@@ -500,65 +500,214 @@ secret "kv/${env("ENV")}/app" {
 - [x] Homebrew tap (`brew install pavlenkoa/tap/vsg`)
 
 ### Planned
-- [ ] Secret block restructure with `content {}` (see below) - **next**
+- [ ] **v2.0.0 release** - new config structure with `content {}` block (see below) - **next**
 - [ ] GCS fetcher
 - [ ] Azure Blob Storage fetcher
 - [ ] Kubernetes auth
 - [ ] AppRole auth
 - [ ] Password hashing functions with referential values (see below)
 
-## Planned Feature: Secret Block Restructure
+## v2.0.0 Implementation Plan
 
-### Problem
+This is a **breaking change** that restructures the config format to support dynamic paths.
 
-HCL block labels don't support `${...}` template interpolation - it's rejected by the parser. This prevents dynamic secret paths like `secret "kv/${env("ENV")}/app"`.
-
-### Solution
-
-Restructure secret blocks to separate metadata from content:
+### 1. New Config Structure
 
 ```hcl
-secret "my-app" {
-  path  = "kv/${env("ENV")}/app"  # Expression - interpolation works!
-  prune = true
+vault {
+  address = "https://vault.example.com"
+
+  auth {
+    method = "kubernetes"
+    role   = "vsg"
+  }
+}
+
+defaults {
+  mount   = "secret"   # default mount if not specified per-secret
+  version = 2          # KV version: 1 or 2, auto-detect if omitted
+
+  strategy {
+    generate = "create"
+    json     = "update"
+    yaml     = "update"
+    raw      = "update"
+    static   = "update"
+    command  = "update"
+    vault    = "update"
+  }
+
+  generate {
+    length     = 32
+    digits     = 5
+    symbols    = 5
+    symbol_set = "-_$@"
+    no_upper   = false
+  }
+}
+
+secret "prod-app" {
+  mount   = "secret"                # optional, uses defaults.mount
+  path    = "${env("ENV")}/app"     # path within mount, supports interpolation
+  version = 2                       # optional, uses defaults.version, then auto-detect
+  prune   = true
 
   content {
     api_key     = generate()
-    db_password = generate({length = 24})
-    path        = "some value"  # No conflict with path attribute
+    db_password = generate({length = 64})
+    db_host     = json("s3://bucket/terraform.tfstate", ".outputs.db_host.value")
+    db_port     = "5432"
+    ssh_key     = raw("s3://bucket/keys/deploy.pem")
+    shared      = vault("secret/shared", "api_key")
+    hash        = command("caddy hash-password --plaintext mypassword")
+  }
+}
+
+secret "prod-database" {
+  path = "prod/database"   # uses defaults.mount and defaults.version
+
+  content {
+    password = generate()
+    host     = "db.example.com"
   }
 }
 ```
 
-### Benefits
+### 2. Key Changes from v1.x
 
-- `path` is an HCL expression, so `env()` and `${...}` interpolation work natively
-- Block label becomes an identifier (for logging, errors, referencing)
-- No reserved key conflicts - `content {}` isolates secret data
-- Room for more metadata attributes in the future
+| v1.x | v2.0 |
+|------|------|
+| `secret "kv/prod/app" { ... }` | `secret "prod-app" { path = "prod/app" content { ... } }` |
+| Path in block label | Path as attribute inside block |
+| Keys directly in secret block | Keys inside `content {}` block |
+| No mount separation | Explicit `mount` attribute |
+| Auto-detect KV version only | Optional explicit `version` attribute |
 
-### Backward Compatibility
+### 3. Validation Rules
 
-Support both forms:
+Implement these validations at config parse time:
 
+1. **Labels must be unique** - no two `secret "xxx"` with same label
+2. **Mount + path must be unique** - no two secrets resolving to same mount + path (after env interpolation)
+3. **`path` is required** - error if omitted
+4. **`content {}` is required** - error if omitted or empty
+5. **`mount` optional** - falls back to `defaults.mount`, then `"secret"`
+6. **`version` optional** - falls back to `defaults.version`, then auto-detect from `/sys/mounts`
+
+### 4. Vault Path Resolution
+
+```
+KV v2: /{mount}/data/{path}
+KV v1: /{mount}/{path}
+```
+
+Example with `mount = "secret"`, `path = "prod/app"`:
+- KV v2 → `secret/data/prod/app`
+- KV v1 → `secret/prod/app`
+
+### 5. Version Resolution Priority
+
+1. `secret.version` (explicit per-secret)
+2. `defaults.version` (global default)
+3. Auto-detect from `/sys/mounts`
+
+### 6. Implementation Checklist
+
+- [ ] Update `internal/config/types.go` - add `Mount` to `Defaults` and `SecretBlock`, rename `Data` to `Content`
+- [ ] Update `internal/config/hcl.go` - parse new structure with `content {}` block
+- [ ] Update `internal/engine/reconcile.go` - use mount + path for Vault operations
+- [ ] Update `internal/engine/diff.go` - update diff logic for new structure
+- [ ] Update `internal/vault/client.go` - separate mount from path in API calls
+- [ ] Update tests for new config structure
+- [ ] Update `CLAUDE.md` with new config examples
+- [ ] Update `README.md` with new config examples
+- [ ] Create `docs/migration-v1-to-v2.md`
+- [ ] Create `docs/migration-from-terraform.md`
+- [ ] Update `examples/config.hcl`
+- [ ] Bump version to v2.0.0
+
+### 7. Important Implementation Notes
+
+- **Batch writes**: All keys in `content {}` = single Vault API call (read once, compute, write once)
+- **Interpolation**: `${env("VAR")}` works in `path` attribute (it's an HCL expression now)
+- **Reserved keys**: `mount`, `path`, `version`, `prune` are metadata; user can have keys with same names inside `content {}`
+
+### 8. Migration Guide: v1.x to v2.0
+
+Create `docs/migration-v1-to-v2.md`:
+
+#### Before (v1.x)
 ```hcl
-# Short form - label IS the path (current behavior, no interpolation)
-secret "kv/static/app" {
-  content {
-    api_key = generate()
-  }
+secret "kv/prod/app" {
+  api_key = generate()
+  db_host = json("s3://...", ".outputs.db_host.value")
 }
+```
 
-# Long form - explicit path with interpolation
-secret "dynamic-app" {
-  path = "kv/${env("ENV")}/app"
+#### After (v2.0)
+```hcl
+secret "prod-app" {
+  mount = "kv"
+  path  = "prod/app"
+
   content {
     api_key = generate()
+    db_host = json("s3://...", ".outputs.db_host.value")
   }
 }
 ```
 
-If `path` attribute is omitted, the block label is used as the path (backward compatible with current behavior, minus the content wrapper).
+#### Migration Steps
+1. Update config file to new structure
+2. Test with `vsg apply --dry-run`
+3. Apply with `vsg apply`
+
+### 9. Migration Guide: Terraform to VSG
+
+Create `docs/migration-from-terraform.md`:
+
+#### Why Migrate?
+- Secrets stored in Terraform state (security risk)
+- Terraform state contains plaintext passwords
+- VSG generates secrets without storing them anywhere
+
+#### Terraform Resource
+```hcl
+resource "vault_kv_secret_v2" "db" {
+  mount = "secret"
+  name  = "prod/db"
+  data_json = jsonencode({
+    password = random_password.db.result
+    host     = aws_rds_instance.db.endpoint
+  })
+}
+
+output "db_endpoint" {
+  value = aws_rds_instance.db.endpoint
+}
+```
+
+#### VSG Equivalent
+```hcl
+secret "db" {
+  mount = "secret"
+  path  = "prod/db"
+
+  content {
+    password = generate()
+    host     = json("s3://bucket/terraform.tfstate", ".outputs.db_endpoint.value")
+  }
+}
+```
+
+#### Migration Steps
+1. `terraform apply` (adds outputs)
+2. `vsg apply --dry-run` (verify changes)
+3. `vsg apply` (VSG now manages secrets)
+4. Remove `vault_kv_secret_v2` from Terraform
+5. `terraform apply` (Terraform stops managing)
+
+**Note:** Run VSG before removing Terraform resource to avoid downtime. Generated passwords won't match old ones - coordinate with app deployments.
 
 ## Planned Feature: Password Hashing Functions
 
