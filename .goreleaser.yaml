@@ -76,7 +76,7 @@ changelog:
       regexp: "(?i)^.*breaking.*$"
       order: 0
     - title: Features
-      regexp: "(?i)^.*(feat:|implement|add(?!.*plan)).*$"
+      regexp: "(?i)^.*(feat:|implement|add ).*$"
       order: 1
     - title: Bug Fixes
       regexp: "(?i)^.*(fix:|bugfix).*$"
