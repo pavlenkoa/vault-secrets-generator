@@ -403,6 +403,9 @@ secret "dev-config" {
 | Vault | `vault(path, key)` | Copy from another Vault path |
 | Command | `command(cmd)` | Execute shell command |
 | Env | `env(name)` | Environment variable |
+| Bcrypt | `bcrypt({from = "key"})` | Hash value from another key (bcrypt) |
+| Argon2 | `argon2({from = "key"})` | Hash value from another key (argon2) |
+| PBKDF2 | `pbkdf2({from = "key"})` | Hash value from another key (PBKDF2) |
 
 All functions support optional strategy parameter via object literal:
 
@@ -434,6 +437,51 @@ For `json()`, `yaml()`, and `raw()` functions:
 | `symbol_set` | `-_$@` | Allowed symbol characters |
 | `no_upper` | false | Exclude uppercase letters |
 
+### Hash Functions
+
+Hash functions generate password hashes that reference other keys in the same secret block:
+
+```hcl
+secret "app" {
+  path = "app/auth"
+
+  content {
+    admin_password      = generate({length = 32})
+    admin_password_hash = argon2({from = "admin_password"})
+
+    api_key             = generate()
+    api_key_bcrypt      = bcrypt({from = "api_key", cost = 12})
+
+    oidc_secret         = generate({length = 64, symbols = 0})
+    oidc_hash           = pbkdf2({from = "oidc_secret", variant = "sha512"})
+  }
+}
+```
+
+**Bcrypt options:**
+| Option | Default | Description |
+|--------|---------|-------------|
+| `from` | (required) | Key name to hash |
+| `cost` | 12 | Bcrypt cost factor (4-31) |
+
+**Argon2 options:**
+| Option | Default | Description |
+|--------|---------|-------------|
+| `from` | (required) | Key name to hash |
+| `variant` | `id` | `id` (argon2id) or `i` (argon2i) |
+| `memory` | 65536 | Memory in KB (64MB default) |
+| `iterations` | 3 | Number of iterations |
+| `parallelism` | 4 | Degree of parallelism |
+
+**PBKDF2 options:**
+| Option | Default | Description |
+|--------|---------|-------------|
+| `from` | (required) | Key name to hash |
+| `variant` | `sha512` | `sha256` or `sha512` |
+| `iterations` | 310000 | Number of iterations |
+
+Hash functions use **verification** to determine updates - if the existing hash verifies against the current password, no update occurs (avoiding unnecessary secret version bumps).
+
 ### Strategies
 
 | Strategy | Key missing | Key exists, same value | Key exists, different value |
@@ -452,6 +500,9 @@ Default strategies by value type:
 | `static` | `update` | Update if changed |
 | `command` | `update` | Re-run and update |
 | `vault` | `update` | Keep in sync with source |
+| `bcrypt` | `update` | Keep hash in sync with source key |
+| `argon2` | `update` | Keep hash in sync with source key |
+| `pbkdf2` | `update` | Keep hash in sync with source key |
 
 ### Prune
 

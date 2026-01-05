@@ -64,6 +64,9 @@ type StrategyDefaults struct {
 	Static   Strategy
 	Command  Strategy
 	Vault    Strategy
+	Bcrypt   Strategy
+	Argon2   Strategy
+	Pbkdf2   Strategy
 }
 
 // DefaultStrategyDefaults returns the default strategy configuration.
@@ -76,6 +79,9 @@ func DefaultStrategyDefaults() StrategyDefaults {
 		Static:   StrategyUpdate, // Update if changed
 		Command:  StrategyUpdate, // Re-run and update
 		Vault:    StrategyUpdate, // Keep in sync with source
+		Bcrypt:   StrategyUpdate, // Keep in sync with source key
+		Argon2:   StrategyUpdate, // Keep in sync with source key
+		Pbkdf2:   StrategyUpdate, // Keep in sync with source key
 	}
 }
 
@@ -126,6 +132,45 @@ func DefaultPasswordPolicy() PasswordPolicy {
 		NoUpper:          false,
 		AllowRepeat:      &allowRepeat,
 	}
+}
+
+// BcryptConfig defines bcrypt hashing parameters.
+type BcryptConfig struct {
+	// FromKey is the key name to hash (must exist in same secret block)
+	FromKey string
+
+	// Cost is the bcrypt cost factor (default: 12)
+	Cost int
+}
+
+// Argon2Config defines argon2 hashing parameters.
+type Argon2Config struct {
+	// FromKey is the key name to hash (must exist in same secret block)
+	FromKey string
+
+	// Variant is the argon2 variant: "id" or "i" (default: "id")
+	Variant string
+
+	// Memory is the memory size in KB (default: 65536 = 64MB)
+	Memory uint32
+
+	// Iterations is the number of iterations (default: 3)
+	Iterations uint32
+
+	// Parallelism is the degree of parallelism (default: 4)
+	Parallelism uint8
+}
+
+// Pbkdf2Config defines PBKDF2 hashing parameters.
+type Pbkdf2Config struct {
+	// FromKey is the key name to hash (must exist in same secret block)
+	FromKey string
+
+	// Variant is the hash function: "sha256" or "sha512" (default: "sha512")
+	Variant string
+
+	// Iterations is the number of iterations (default: 310000)
+	Iterations int
 }
 
 // SecretBlock represents a group of secrets at a Vault path.
@@ -182,6 +227,9 @@ const (
 	ValueTypeRaw      ValueType = "raw"
 	ValueTypeVault    ValueType = "vault"
 	ValueTypeCommand  ValueType = "command"
+	ValueTypeBcrypt   ValueType = "bcrypt"
+	ValueTypeArgon2   ValueType = "argon2"
+	ValueTypePbkdf2   ValueType = "pbkdf2"
 )
 
 // Value represents a secret value which can be static, generated, fetched, or from a command.
@@ -212,4 +260,13 @@ type Value struct {
 
 	// Command is the shell command for command type
 	Command string
+
+	// Bcrypt holds the bcrypt hashing configuration
+	Bcrypt *BcryptConfig
+
+	// Argon2 holds the argon2 hashing configuration
+	Argon2 *Argon2Config
+
+	// Pbkdf2 holds the PBKDF2 hashing configuration
+	Pbkdf2 *Pbkdf2Config
 }

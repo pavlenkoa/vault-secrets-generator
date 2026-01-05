@@ -101,6 +101,9 @@ func buildEvalContext(vars Variables) *hcl.EvalContext {
 			"raw":      makeRawFunction(),
 			"vault":    makeVaultFunction(),
 			"command":  makeCommandFunction(),
+			"bcrypt":   makeBcryptFunction(),
+			"argon2":   makeArgon2Function(),
+			"pbkdf2":   makePbkdf2Function(),
 		},
 	}
 }
@@ -141,6 +144,12 @@ var valueMarkerType = cty.Object(map[string]cty.Type{
 	"_symbol_set":   cty.String,
 	"_no_upper":     cty.Bool,
 	"_allow_repeat": cty.Bool,
+	"_from":         cty.String,
+	"_cost":         cty.Number,
+	"_variant":      cty.String,
+	"_memory":       cty.Number,
+	"_iterations":   cty.Number,
+	"_parallelism":  cty.Number,
 })
 
 // makeGenerateFunction creates the generate() function
@@ -167,6 +176,12 @@ func makeGenerateFunction() function.Function {
 				"_symbol_set":   cty.StringVal(""),
 				"_no_upper":     cty.False,
 				"_allow_repeat": cty.True,
+				"_from":         cty.StringVal(""),
+				"_cost":         cty.NumberIntVal(0),
+				"_variant":      cty.StringVal(""),
+				"_memory":       cty.NumberIntVal(0),
+				"_iterations":   cty.NumberIntVal(0),
+				"_parallelism":  cty.NumberIntVal(0),
 			}
 
 			// Parse named arguments from varargs
@@ -239,6 +254,12 @@ func makeSourceFunction(sourceType string) function.Function {
 				"_symbol_set":   cty.StringVal(""),
 				"_no_upper":     cty.False,
 				"_allow_repeat": cty.True,
+				"_from":         cty.StringVal(""),
+				"_cost":         cty.NumberIntVal(0),
+				"_variant":      cty.StringVal(""),
+				"_memory":       cty.NumberIntVal(0),
+				"_iterations":   cty.NumberIntVal(0),
+				"_parallelism":  cty.NumberIntVal(0),
 			}), nil
 		},
 	})
@@ -283,6 +304,12 @@ func makeRawFunction() function.Function {
 				"_symbol_set":   cty.StringVal(""),
 				"_no_upper":     cty.False,
 				"_allow_repeat": cty.True,
+				"_from":         cty.StringVal(""),
+				"_cost":         cty.NumberIntVal(0),
+				"_variant":      cty.StringVal(""),
+				"_memory":       cty.NumberIntVal(0),
+				"_iterations":   cty.NumberIntVal(0),
+				"_parallelism":  cty.NumberIntVal(0),
 			}), nil
 		},
 	})
@@ -329,6 +356,12 @@ func makeVaultFunction() function.Function {
 				"_symbol_set":   cty.StringVal(""),
 				"_no_upper":     cty.False,
 				"_allow_repeat": cty.True,
+				"_from":         cty.StringVal(""),
+				"_cost":         cty.NumberIntVal(0),
+				"_variant":      cty.StringVal(""),
+				"_memory":       cty.NumberIntVal(0),
+				"_iterations":   cty.NumberIntVal(0),
+				"_parallelism":  cty.NumberIntVal(0),
 			}), nil
 		},
 	})
@@ -373,7 +406,195 @@ func makeCommandFunction() function.Function {
 				"_symbol_set":   cty.StringVal(""),
 				"_no_upper":     cty.False,
 				"_allow_repeat": cty.True,
+				"_from":         cty.StringVal(""),
+				"_cost":         cty.NumberIntVal(0),
+				"_variant":      cty.StringVal(""),
+				"_memory":       cty.NumberIntVal(0),
+				"_iterations":   cty.NumberIntVal(0),
+				"_parallelism":  cty.NumberIntVal(0),
 			}), nil
+		},
+	})
+}
+
+// makeBcryptFunction creates the bcrypt() function for password hashing
+func makeBcryptFunction() function.Function {
+	return function.New(&function.Spec{
+		Params: []function.Parameter{},
+		VarParam: &function.Parameter{
+			Name: "options",
+			Type: cty.DynamicPseudoType,
+		},
+		Type: function.StaticReturnType(valueMarkerType),
+		Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+			result := map[string]cty.Value{
+				"_type":         cty.StringVal("bcrypt"),
+				"_strategy":     cty.StringVal(""),
+				"_url":          cty.StringVal(""),
+				"_query":        cty.StringVal(""),
+				"_vault_path":   cty.StringVal(""),
+				"_vault_key":    cty.StringVal(""),
+				"_command":      cty.StringVal(""),
+				"_length":       cty.NumberIntVal(0),
+				"_digits":       cty.NumberIntVal(-1),
+				"_symbols":      cty.NumberIntVal(-1),
+				"_symbol_set":   cty.StringVal(""),
+				"_no_upper":     cty.False,
+				"_allow_repeat": cty.True,
+				"_from":         cty.StringVal(""),
+				"_cost":         cty.NumberIntVal(0),
+				"_variant":      cty.StringVal(""),
+				"_memory":       cty.NumberIntVal(0),
+				"_iterations":   cty.NumberIntVal(0),
+				"_parallelism":  cty.NumberIntVal(0),
+			}
+
+			// Parse options from varargs
+			for _, arg := range args {
+				if arg.Type().IsObjectType() {
+					for k, v := range arg.AsValueMap() {
+						switch k {
+						case "from":
+							result["_from"] = v
+						case "cost":
+							result["_cost"] = v
+						case "strategy":
+							result["_strategy"] = v
+						}
+					}
+				}
+			}
+
+			// Validate required 'from' parameter
+			if result["_from"].AsString() == "" {
+				return cty.NilVal, fmt.Errorf("bcrypt() requires 'from' parameter")
+			}
+
+			return cty.ObjectVal(result), nil
+		},
+	})
+}
+
+// makeArgon2Function creates the argon2() function for password hashing
+func makeArgon2Function() function.Function {
+	return function.New(&function.Spec{
+		Params: []function.Parameter{},
+		VarParam: &function.Parameter{
+			Name: "options",
+			Type: cty.DynamicPseudoType,
+		},
+		Type: function.StaticReturnType(valueMarkerType),
+		Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+			result := map[string]cty.Value{
+				"_type":         cty.StringVal("argon2"),
+				"_strategy":     cty.StringVal(""),
+				"_url":          cty.StringVal(""),
+				"_query":        cty.StringVal(""),
+				"_vault_path":   cty.StringVal(""),
+				"_vault_key":    cty.StringVal(""),
+				"_command":      cty.StringVal(""),
+				"_length":       cty.NumberIntVal(0),
+				"_digits":       cty.NumberIntVal(-1),
+				"_symbols":      cty.NumberIntVal(-1),
+				"_symbol_set":   cty.StringVal(""),
+				"_no_upper":     cty.False,
+				"_allow_repeat": cty.True,
+				"_from":         cty.StringVal(""),
+				"_cost":         cty.NumberIntVal(0),
+				"_variant":      cty.StringVal(""),
+				"_memory":       cty.NumberIntVal(0),
+				"_iterations":   cty.NumberIntVal(0),
+				"_parallelism":  cty.NumberIntVal(0),
+			}
+
+			// Parse options from varargs
+			for _, arg := range args {
+				if arg.Type().IsObjectType() {
+					for k, v := range arg.AsValueMap() {
+						switch k {
+						case "from":
+							result["_from"] = v
+						case "variant":
+							result["_variant"] = v
+						case "memory":
+							result["_memory"] = v
+						case "iterations":
+							result["_iterations"] = v
+						case "parallelism":
+							result["_parallelism"] = v
+						case "strategy":
+							result["_strategy"] = v
+						}
+					}
+				}
+			}
+
+			// Validate required 'from' parameter
+			if result["_from"].AsString() == "" {
+				return cty.NilVal, fmt.Errorf("argon2() requires 'from' parameter")
+			}
+
+			return cty.ObjectVal(result), nil
+		},
+	})
+}
+
+// makePbkdf2Function creates the pbkdf2() function for password hashing
+func makePbkdf2Function() function.Function {
+	return function.New(&function.Spec{
+		Params: []function.Parameter{},
+		VarParam: &function.Parameter{
+			Name: "options",
+			Type: cty.DynamicPseudoType,
+		},
+		Type: function.StaticReturnType(valueMarkerType),
+		Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+			result := map[string]cty.Value{
+				"_type":         cty.StringVal("pbkdf2"),
+				"_strategy":     cty.StringVal(""),
+				"_url":          cty.StringVal(""),
+				"_query":        cty.StringVal(""),
+				"_vault_path":   cty.StringVal(""),
+				"_vault_key":    cty.StringVal(""),
+				"_command":      cty.StringVal(""),
+				"_length":       cty.NumberIntVal(0),
+				"_digits":       cty.NumberIntVal(-1),
+				"_symbols":      cty.NumberIntVal(-1),
+				"_symbol_set":   cty.StringVal(""),
+				"_no_upper":     cty.False,
+				"_allow_repeat": cty.True,
+				"_from":         cty.StringVal(""),
+				"_cost":         cty.NumberIntVal(0),
+				"_variant":      cty.StringVal(""),
+				"_memory":       cty.NumberIntVal(0),
+				"_iterations":   cty.NumberIntVal(0),
+				"_parallelism":  cty.NumberIntVal(0),
+			}
+
+			// Parse options from varargs
+			for _, arg := range args {
+				if arg.Type().IsObjectType() {
+					for k, v := range arg.AsValueMap() {
+						switch k {
+						case "from":
+							result["_from"] = v
+						case "variant":
+							result["_variant"] = v
+						case "iterations":
+							result["_iterations"] = v
+						case "strategy":
+							result["_strategy"] = v
+						}
+					}
+				}
+			}
+
+			// Validate required 'from' parameter
+			if result["_from"].AsString() == "" {
+				return cty.NilVal, fmt.Errorf("pbkdf2() requires 'from' parameter")
+			}
+
+			return cty.ObjectVal(result), nil
 		},
 	})
 }
@@ -832,6 +1053,36 @@ func ctyValueToValue(val cty.Value) (Value, error) {
 			v.Type = ValueTypeCommand
 			v.Command = valMap["_command"].AsString()
 
+		case "bcrypt":
+			v.Type = ValueTypeBcrypt
+			cost, _ := valMap["_cost"].AsBigFloat().Int64()
+			v.Bcrypt = &BcryptConfig{
+				FromKey: valMap["_from"].AsString(),
+				Cost:    int(cost),
+			}
+
+		case "argon2":
+			v.Type = ValueTypeArgon2
+			memory, _ := valMap["_memory"].AsBigFloat().Int64()
+			iterations, _ := valMap["_iterations"].AsBigFloat().Int64()
+			parallelism, _ := valMap["_parallelism"].AsBigFloat().Int64()
+			v.Argon2 = &Argon2Config{
+				FromKey:     valMap["_from"].AsString(),
+				Variant:     valMap["_variant"].AsString(),
+				Memory:      uint32(memory),
+				Iterations:  uint32(iterations),
+				Parallelism: uint8(parallelism),
+			}
+
+		case "pbkdf2":
+			v.Type = ValueTypePbkdf2
+			iterations, _ := valMap["_iterations"].AsBigFloat().Int64()
+			v.Pbkdf2 = &Pbkdf2Config{
+				FromKey:    valMap["_from"].AsString(),
+				Variant:    valMap["_variant"].AsString(),
+				Iterations: int(iterations),
+			}
+
 		default:
 			return Value{}, fmt.Errorf("unknown value type: %s", typeStr)
 		}
@@ -886,6 +1137,58 @@ func applyDefaults(cfg *Config) {
 	}
 }
 
+// detectHashCycles checks for circular references and missing references in hash functions
+func detectHashCycles(name string, content map[string]Value) error {
+	// Build dependency map: key -> key it references (for hash functions only)
+	deps := make(map[string]string)
+	for key, val := range content {
+		var fromKey string
+		switch val.Type {
+		case ValueTypeBcrypt:
+			if val.Bcrypt != nil {
+				fromKey = val.Bcrypt.FromKey
+			}
+		case ValueTypeArgon2:
+			if val.Argon2 != nil {
+				fromKey = val.Argon2.FromKey
+			}
+		case ValueTypePbkdf2:
+			if val.Pbkdf2 != nil {
+				fromKey = val.Pbkdf2.FromKey
+			}
+		}
+		if fromKey != "" {
+			deps[key] = fromKey
+		}
+	}
+
+	// Check that all referenced keys exist
+	for key, fromKey := range deps {
+		if _, exists := content[fromKey]; !exists {
+			return fmt.Errorf("secret %q: key %q references non-existent key %q", name, key, fromKey)
+		}
+	}
+
+	// Check for cycles by following reference chains
+	for startKey := range deps {
+		visited := make(map[string]bool)
+		current := startKey
+		for {
+			if visited[current] {
+				return fmt.Errorf("secret %q: circular reference detected starting from key %q", name, startKey)
+			}
+			visited[current] = true
+			next, hasNext := deps[current]
+			if !hasNext {
+				break
+			}
+			current = next
+		}
+	}
+
+	return nil
+}
+
 // validate validates the configuration
 func validate(cfg *Config) error {
 	if len(cfg.Secrets) == 0 {
@@ -927,6 +1230,11 @@ func validate(cfg *Config) error {
 			return fmt.Errorf("secret %q: duplicate path %q (already defined by %q)", name, fullPath, existingName)
 		}
 		fullPaths[fullPath] = name
+
+		// Check for hash function reference cycles and missing references
+		if err := detectHashCycles(name, block.Content); err != nil {
+			return err
+		}
 
 		// Validate generate policies
 		for key, val := range block.Content {

@@ -38,9 +38,11 @@ func NewResolver(fetchers *fetcher.Registry, vaultReader VaultReader, defaults c
 
 // ResolveResult contains the resolved value and metadata.
 type ResolveResult struct {
-	Value    string
-	Source   ValueSource
-	Strategy config.Strategy
+	Value      string
+	Source     ValueSource
+	Strategy   config.Strategy
+	StaleHash  bool   // True if hash doesn't verify but strategy=create prevented update
+	FromKey    string // For hash types, the key that was hashed
 }
 
 // ValueSource indicates where a value came from.
@@ -56,6 +58,9 @@ const (
 	SourceVault     ValueSource = "vault"
 	SourceCommand   ValueSource = "command"
 	SourceExisting  ValueSource = "existing"
+	SourceBcrypt    ValueSource = "bcrypt"
+	SourceArgon2    ValueSource = "argon2"
+	SourcePbkdf2    ValueSource = "pbkdf2"
 )
 
 // Resolve resolves a single value based on its type.
@@ -112,6 +117,12 @@ func (r *Resolver) getDefaultStrategy(valueType config.ValueType) config.Strateg
 		return r.strategies.Command
 	case config.ValueTypeVault:
 		return r.strategies.Vault
+	case config.ValueTypeBcrypt:
+		return r.strategies.Bcrypt
+	case config.ValueTypeArgon2:
+		return r.strategies.Argon2
+	case config.ValueTypePbkdf2:
+		return r.strategies.Pbkdf2
 	default:
 		return config.StrategyUpdate
 	}
@@ -337,4 +348,246 @@ func (r *Resolver) resolveCommand(ctx context.Context, val config.Value, existin
 		Source:   SourceCommand,
 		Strategy: strategy,
 	}, nil
+}
+
+// ResolveHash resolves a hash value (bcrypt, argon2, pbkdf2).
+// sourceValue is the password to hash (from resolvedValues map).
+// existingValue is the current hash in Vault (if any).
+// force forces regeneration of the hash.
+func (r *Resolver) ResolveHash(val config.Value, sourceValue, existingValue string, force bool) (*ResolveResult, error) {
+	// Determine effective strategy
+	strategy := val.Strategy
+	if strategy == "" {
+		strategy = r.getDefaultStrategy(val.Type)
+	}
+
+	switch val.Type {
+	case config.ValueTypeBcrypt:
+		return r.resolveBcrypt(val, sourceValue, existingValue, force, strategy)
+	case config.ValueTypeArgon2:
+		return r.resolveArgon2(val, sourceValue, existingValue, force, strategy)
+	case config.ValueTypePbkdf2:
+		return r.resolvePbkdf2(val, sourceValue, existingValue, force, strategy)
+	default:
+		return nil, fmt.Errorf("ResolveHash called with non-hash type: %s", val.Type)
+	}
+}
+
+// resolveBcrypt generates a bcrypt hash of the source value.
+func (r *Resolver) resolveBcrypt(val config.Value, sourceValue, existingValue string, force bool, strategy config.Strategy) (*ResolveResult, error) {
+	// --force overrides everything: regenerate hash
+	if force {
+		hash, err := generator.HashBcrypt(sourceValue, *val.Bcrypt)
+		if err != nil {
+			return nil, fmt.Errorf("generating bcrypt hash: %w", err)
+		}
+		return &ResolveResult{
+			Value:    hash,
+			Source:   SourceBcrypt,
+			Strategy: strategy,
+		}, nil
+	}
+
+	// If hash doesn't exist, create it (both strategies)
+	if existingValue == "" {
+		hash, err := generator.HashBcrypt(sourceValue, *val.Bcrypt)
+		if err != nil {
+			return nil, fmt.Errorf("generating bcrypt hash: %w", err)
+		}
+		return &ResolveResult{
+			Value:    hash,
+			Source:   SourceBcrypt,
+			Strategy: strategy,
+		}, nil
+	}
+
+	// Hash exists - check if it verifies against current source
+	verifies := generator.VerifyBcrypt(existingValue, sourceValue)
+
+	if strategy == config.StrategyCreate {
+		// create strategy: don't update, ever
+		// Mark as stale if hash doesn't verify (caller should warn)
+		return &ResolveResult{
+			Value:     existingValue,
+			Source:    SourceExisting,
+			Strategy:  strategy,
+			StaleHash: !verifies,
+			FromKey:   val.Bcrypt.FromKey,
+		}, nil
+	}
+
+	// strategy == StrategyUpdate
+	if verifies {
+		// Hash is valid, no update needed
+		return &ResolveResult{
+			Value:    existingValue,
+			Source:   SourceExisting,
+			Strategy: strategy,
+		}, nil
+	}
+
+	// Hash is stale, regenerate
+	hash, err := generator.HashBcrypt(sourceValue, *val.Bcrypt)
+	if err != nil {
+		return nil, fmt.Errorf("generating bcrypt hash: %w", err)
+	}
+	return &ResolveResult{
+		Value:    hash,
+		Source:   SourceBcrypt,
+		Strategy: strategy,
+	}, nil
+}
+
+// resolveArgon2 generates an argon2 hash of the source value.
+func (r *Resolver) resolveArgon2(val config.Value, sourceValue, existingValue string, force bool, strategy config.Strategy) (*ResolveResult, error) {
+	// --force overrides everything: regenerate hash
+	if force {
+		hash, err := generator.HashArgon2(sourceValue, *val.Argon2)
+		if err != nil {
+			return nil, fmt.Errorf("generating argon2 hash: %w", err)
+		}
+		return &ResolveResult{
+			Value:    hash,
+			Source:   SourceArgon2,
+			Strategy: strategy,
+		}, nil
+	}
+
+	// If hash doesn't exist, create it (both strategies)
+	if existingValue == "" {
+		hash, err := generator.HashArgon2(sourceValue, *val.Argon2)
+		if err != nil {
+			return nil, fmt.Errorf("generating argon2 hash: %w", err)
+		}
+		return &ResolveResult{
+			Value:    hash,
+			Source:   SourceArgon2,
+			Strategy: strategy,
+		}, nil
+	}
+
+	// Hash exists - check if it verifies against current source
+	verifies := generator.VerifyArgon2(existingValue, sourceValue)
+
+	if strategy == config.StrategyCreate {
+		// create strategy: don't update, ever
+		// Mark as stale if hash doesn't verify (caller should warn)
+		return &ResolveResult{
+			Value:     existingValue,
+			Source:    SourceExisting,
+			Strategy:  strategy,
+			StaleHash: !verifies,
+			FromKey:   val.Argon2.FromKey,
+		}, nil
+	}
+
+	// strategy == StrategyUpdate
+	if verifies {
+		// Hash is valid, no update needed
+		return &ResolveResult{
+			Value:    existingValue,
+			Source:   SourceExisting,
+			Strategy: strategy,
+		}, nil
+	}
+
+	// Hash is stale, regenerate
+	hash, err := generator.HashArgon2(sourceValue, *val.Argon2)
+	if err != nil {
+		return nil, fmt.Errorf("generating argon2 hash: %w", err)
+	}
+	return &ResolveResult{
+		Value:    hash,
+		Source:   SourceArgon2,
+		Strategy: strategy,
+	}, nil
+}
+
+// resolvePbkdf2 generates a PBKDF2 hash of the source value.
+func (r *Resolver) resolvePbkdf2(val config.Value, sourceValue, existingValue string, force bool, strategy config.Strategy) (*ResolveResult, error) {
+	// --force overrides everything: regenerate hash
+	if force {
+		hash, err := generator.HashPbkdf2(sourceValue, *val.Pbkdf2)
+		if err != nil {
+			return nil, fmt.Errorf("generating pbkdf2 hash: %w", err)
+		}
+		return &ResolveResult{
+			Value:    hash,
+			Source:   SourcePbkdf2,
+			Strategy: strategy,
+		}, nil
+	}
+
+	// If hash doesn't exist, create it (both strategies)
+	if existingValue == "" {
+		hash, err := generator.HashPbkdf2(sourceValue, *val.Pbkdf2)
+		if err != nil {
+			return nil, fmt.Errorf("generating pbkdf2 hash: %w", err)
+		}
+		return &ResolveResult{
+			Value:    hash,
+			Source:   SourcePbkdf2,
+			Strategy: strategy,
+		}, nil
+	}
+
+	// Hash exists - check if it verifies against current source
+	verifies := generator.VerifyPbkdf2(existingValue, sourceValue)
+
+	if strategy == config.StrategyCreate {
+		// create strategy: don't update, ever
+		// Mark as stale if hash doesn't verify (caller should warn)
+		return &ResolveResult{
+			Value:     existingValue,
+			Source:    SourceExisting,
+			Strategy:  strategy,
+			StaleHash: !verifies,
+			FromKey:   val.Pbkdf2.FromKey,
+		}, nil
+	}
+
+	// strategy == StrategyUpdate
+	if verifies {
+		// Hash is valid, no update needed
+		return &ResolveResult{
+			Value:    existingValue,
+			Source:   SourceExisting,
+			Strategy: strategy,
+		}, nil
+	}
+
+	// Hash is stale, regenerate
+	hash, err := generator.HashPbkdf2(sourceValue, *val.Pbkdf2)
+	if err != nil {
+		return nil, fmt.Errorf("generating pbkdf2 hash: %w", err)
+	}
+	return &ResolveResult{
+		Value:    hash,
+		Source:   SourcePbkdf2,
+		Strategy: strategy,
+	}, nil
+}
+
+// IsHashType returns true if the value type is a hash function.
+func IsHashType(t config.ValueType) bool {
+	return t == config.ValueTypeBcrypt || t == config.ValueTypeArgon2 || t == config.ValueTypePbkdf2
+}
+
+// GetHashFromKey returns the from_key for a hash value type.
+func GetHashFromKey(val config.Value) string {
+	switch val.Type {
+	case config.ValueTypeBcrypt:
+		if val.Bcrypt != nil {
+			return val.Bcrypt.FromKey
+		}
+	case config.ValueTypeArgon2:
+		if val.Argon2 != nil {
+			return val.Argon2.FromKey
+		}
+	case config.ValueTypePbkdf2:
+		if val.Pbkdf2 != nil {
+			return val.Pbkdf2.FromKey
+		}
+	}
+	return ""
 }

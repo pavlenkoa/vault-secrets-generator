@@ -198,13 +198,34 @@ func (e *Engine) processBlock(ctx context.Context, name string, block config.Sec
 	}
 
 	// Resolve desired values from Content (v2.0 structure)
+	// Use dependency ordering: non-hash keys first, then hash keys
 	desired := make(map[string]string)
 	sources := make(map[string]ValueSource)
+	resolvedValues := make(map[string]string) // Track resolved values for hash references
 
-	for key, value := range block.Content {
+	// Build resolution order
+	keyOrder := buildDependencyOrder(block.Content)
+
+	for _, key := range keyOrder {
+		value := block.Content[key]
 		existingValue := currentStrings[key]
 
-		resolved, err := e.resolver.Resolve(ctx, value, existingValue, opts.Force)
+		var resolved *ResolveResult
+		var err error
+
+		if IsHashType(value.Type) {
+			// Hash types need the source value from resolvedValues
+			fromKey := GetHashFromKey(value)
+			sourceValue, ok := resolvedValues[fromKey]
+			if !ok {
+				errors = append(errors, BlockError{Block: name, Key: key, Err: fmt.Errorf("hash source key %q not found", fromKey)})
+				continue
+			}
+			resolved, err = e.resolver.ResolveHash(value, sourceValue, existingValue, opts.Force)
+		} else {
+			resolved, err = e.resolver.Resolve(ctx, value, existingValue, opts.Force)
+		}
+
 		if err != nil {
 			errors = append(errors, BlockError{Block: name, Key: key, Err: err})
 			continue
@@ -212,6 +233,17 @@ func (e *Engine) processBlock(ctx context.Context, name string, block config.Sec
 
 		desired[key] = resolved.Value
 		sources[key] = resolved.Source
+		resolvedValues[key] = resolved.Value // Track for hash references
+
+		// Warn about stale hashes that won't be updated due to create strategy
+		if resolved.StaleHash {
+			e.logger.Warn("hash doesn't verify against source key but strategy=create prevents update",
+				"block", name,
+				"key", key,
+				"from_key", resolved.FromKey,
+				"hint", "use strategy=update or --force to regenerate",
+			)
+		}
 
 		e.logger.Debug("resolved secret",
 			"block", name,
@@ -316,6 +348,35 @@ func (e *Engine) applyChanges(ctx context.Context, cfg *config.Config, diff *Dif
 	}
 
 	return errors
+}
+
+// buildDependencyOrder returns keys in resolution order.
+// Non-hash keys come first, then hash keys in topological order.
+func buildDependencyOrder(content map[string]config.Value) []string {
+	var nonHashKeys []string
+	hashDeps := make(map[string]string) // key -> from_key dependency
+
+	for key, val := range content {
+		if IsHashType(val.Type) {
+			fromKey := GetHashFromKey(val)
+			hashDeps[key] = fromKey
+		} else {
+			nonHashKeys = append(nonHashKeys, key)
+		}
+	}
+
+	// Build ordered list: non-hash keys first
+	order := make([]string, 0, len(content))
+	order = append(order, nonHashKeys...)
+
+	// Add hash keys in dependency order
+	// Since we only allow single-level dependencies (hash can only depend on non-hash),
+	// we can add all hash keys after non-hash keys
+	for key := range hashDeps {
+		order = append(order, key)
+	}
+
+	return order
 }
 
 // parsePath splits a path like "secret/myapp" into mount "secret" and subpath "myapp".

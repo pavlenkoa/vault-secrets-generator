@@ -791,3 +791,307 @@ func TestSecretBlock_IsEnabled(t *testing.T) {
 func boolPtr(b bool) *bool {
 	return &b
 }
+
+func TestParseHCL_BcryptFunction(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password      = generate()
+    password_hash = bcrypt({from = "password"})
+  }
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val := cfg.Secrets["test-secret"].Content["password_hash"]
+	if val.Type != ValueTypeBcrypt {
+		t.Errorf("expected bcrypt type, got %s", val.Type)
+	}
+	if val.Bcrypt == nil {
+		t.Fatal("expected bcrypt config to be set")
+	}
+	if val.Bcrypt.FromKey != "password" {
+		t.Errorf("expected from_key=password, got %s", val.Bcrypt.FromKey)
+	}
+	// Default cost should be 0 (will use 12 at runtime)
+	if val.Bcrypt.Cost != 0 {
+		t.Errorf("expected default cost=0, got %d", val.Bcrypt.Cost)
+	}
+}
+
+func TestParseHCL_BcryptWithCost(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password      = generate()
+    password_hash = bcrypt({from = "password", cost = 14})
+  }
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val := cfg.Secrets["test-secret"].Content["password_hash"]
+	if val.Bcrypt.Cost != 14 {
+		t.Errorf("expected cost=14, got %d", val.Bcrypt.Cost)
+	}
+}
+
+func TestParseHCL_Argon2Function(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password      = generate()
+    password_hash = argon2({from = "password"})
+  }
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val := cfg.Secrets["test-secret"].Content["password_hash"]
+	if val.Type != ValueTypeArgon2 {
+		t.Errorf("expected argon2 type, got %s", val.Type)
+	}
+	if val.Argon2 == nil {
+		t.Fatal("expected argon2 config to be set")
+	}
+	if val.Argon2.FromKey != "password" {
+		t.Errorf("expected from_key=password, got %s", val.Argon2.FromKey)
+	}
+}
+
+func TestParseHCL_Argon2WithParams(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password      = generate()
+    password_hash = argon2({
+      from        = "password"
+      variant     = "i"
+      memory      = 32768
+      iterations  = 2
+      parallelism = 2
+    })
+  }
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val := cfg.Secrets["test-secret"].Content["password_hash"]
+	if val.Argon2.Variant != "i" {
+		t.Errorf("expected variant=i, got %s", val.Argon2.Variant)
+	}
+	if val.Argon2.Memory != 32768 {
+		t.Errorf("expected memory=32768, got %d", val.Argon2.Memory)
+	}
+	if val.Argon2.Iterations != 2 {
+		t.Errorf("expected iterations=2, got %d", val.Argon2.Iterations)
+	}
+	if val.Argon2.Parallelism != 2 {
+		t.Errorf("expected parallelism=2, got %d", val.Argon2.Parallelism)
+	}
+}
+
+func TestParseHCL_Pbkdf2Function(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password      = generate()
+    password_hash = pbkdf2({from = "password"})
+  }
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val := cfg.Secrets["test-secret"].Content["password_hash"]
+	if val.Type != ValueTypePbkdf2 {
+		t.Errorf("expected pbkdf2 type, got %s", val.Type)
+	}
+	if val.Pbkdf2 == nil {
+		t.Fatal("expected pbkdf2 config to be set")
+	}
+	if val.Pbkdf2.FromKey != "password" {
+		t.Errorf("expected from_key=password, got %s", val.Pbkdf2.FromKey)
+	}
+}
+
+func TestParseHCL_Pbkdf2WithParams(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password      = generate()
+    password_hash = pbkdf2({
+      from       = "password"
+      variant    = "sha256"
+      iterations = 100000
+    })
+  }
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val := cfg.Secrets["test-secret"].Content["password_hash"]
+	if val.Pbkdf2.Variant != "sha256" {
+		t.Errorf("expected variant=sha256, got %s", val.Pbkdf2.Variant)
+	}
+	if val.Pbkdf2.Iterations != 100000 {
+		t.Errorf("expected iterations=100000, got %d", val.Pbkdf2.Iterations)
+	}
+}
+
+func TestParseHCL_HashWithStrategy(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password      = generate()
+    password_hash = bcrypt({from = "password", strategy = "create"})
+  }
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val := cfg.Secrets["test-secret"].Content["password_hash"]
+	if val.Strategy != StrategyCreate {
+		t.Errorf("expected strategy=create, got %s", val.Strategy)
+	}
+}
+
+func TestParseHCL_HashMissingFrom(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password_hash = bcrypt({cost = 12})
+  }
+}
+`
+
+	_, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err == nil {
+		t.Fatal("expected error for missing 'from' parameter")
+	}
+}
+
+func TestParseHCL_HashCycleDetection(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    a = bcrypt({from = "b"})
+    b = bcrypt({from = "a"})
+  }
+}
+`
+
+	_, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err == nil {
+		t.Fatal("expected error for circular dependency")
+	}
+}
+
+func TestParseHCL_HashMissingReference(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password_hash = bcrypt({from = "nonexistent"})
+  }
+}
+`
+
+	_, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err == nil {
+		t.Fatal("expected error for missing reference")
+	}
+}
+
+func TestParseHCL_HashSelfReference(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password_hash = bcrypt({from = "password_hash"})
+  }
+}
+`
+
+	_, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err == nil {
+		t.Fatal("expected error for self-reference")
+	}
+}
+
+func TestParseHCL_MultipleHashes(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password       = generate()
+    bcrypt_hash    = bcrypt({from = "password"})
+    argon2_hash    = argon2({from = "password"})
+    pbkdf2_hash    = pbkdf2({from = "password"})
+  }
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.Secrets["test-secret"].Content["bcrypt_hash"].Type != ValueTypeBcrypt {
+		t.Error("expected bcrypt type for bcrypt_hash")
+	}
+	if cfg.Secrets["test-secret"].Content["argon2_hash"].Type != ValueTypeArgon2 {
+		t.Error("expected argon2 type for argon2_hash")
+	}
+	if cfg.Secrets["test-secret"].Content["pbkdf2_hash"].Type != ValueTypePbkdf2 {
+		t.Error("expected pbkdf2 type for pbkdf2_hash")
+	}
+}

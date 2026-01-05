@@ -377,7 +377,7 @@ Helm chart available at `helm/vault-secrets-generator/`. Typically deployed as a
 
 ## Current Status
 
-**Version:** v2.1.0
+**Version:** v2.2.0
 
 ### Implemented Features
 - [x] HCL config parsing with custom functions
@@ -404,20 +404,19 @@ Helm chart available at `helm/vault-secrets-generator/`. Typically deployed as a
 - [x] **v2.1.0 Secret filtering**: `enabled` attribute and `--target`/`--exclude` flags
 - [x] **v2.1.0 Config-based delete**: delete command with `--config`, `--target`, `--all`, `--exclude`
 
+- [x] **v2.2.0 Password hashing functions**: `bcrypt()`, `argon2()`, `pbkdf2()` with referential values
+
 ### Planned
 - [ ] GCS fetcher
 - [ ] Azure Blob Storage fetcher
 - [ ] Kubernetes auth testing
 - [ ] AppRole auth testing
-- [ ] Password hashing functions with referential values (see below)
 
-## Planned Feature: Password Hashing Functions
+## Password Hashing Functions
 
-### Overview
+Native password hashing functions that can reference other keys in the same secret block. This enables generating a password and its hash in a single declarative config.
 
-Add native password hashing functions that can reference other keys in the same secret block. This enables generating a password and its hash in a single declarative config.
-
-### Proposed Syntax
+### Syntax
 
 ```hcl
 secret "authelia" {
@@ -461,26 +460,18 @@ secret "authelia" {
 | pbkdf2 | variant | sha512 |
 | pbkdf2 | iterations | 310000 |
 
-### Implementation Requirements
-
-1. **Referential Evaluation**: Engine must resolve dependencies in topological order
-   - Parse `from` references to build dependency graph
-   - Detect cycles and report errors
-   - Resolve base values first, then derived values
-
-2. **PHC String Formatting**: Output must match standard Password Hashing Competition format
-   - Salt generation using crypto/rand
-   - Proper base64 encoding (standard or raw depending on algorithm)
-   - Version and parameter encoding
-
-3. **Go Libraries**:
-   - bcrypt: `golang.org/x/crypto/bcrypt`
-   - argon2: `golang.org/x/crypto/argon2`
-   - pbkdf2: `crypto/pbkdf2` (stdlib)
-
 ### Strategy Behavior
 
-Hash functions use `create` strategy by default (like `generate()`):
-- If the hash already exists in Vault, skip regeneration
+Hash functions use `update` strategy by default (like other derived values):
+- Uses **verification** to determine if update is needed (not string comparison)
+- If the existing hash verifies against the source password, no update needed
+- If the hash is stale (doesn't verify), regenerate with new salt
 - Use `--force` flag to regenerate all passwords and hashes
-- Can override with `strategy = "update"` if needed
+- Can override with `strategy = "create"` to never update existing hashes
+
+### Behavior Notes
+
+- **Cycle detection**: Circular references are detected at parse time
+- **Missing references**: Error at parse time if `from` references a non-existent key
+- **PHC format**: All hashes use Password Hashing Competition string format
+- **Dependency ordering**: Source keys are always resolved before dependent hashes
