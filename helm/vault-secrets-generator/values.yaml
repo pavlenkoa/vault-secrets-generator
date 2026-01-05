@@ -4,7 +4,7 @@ image:
   repository: ghcr.io/pavlenkoa/vault-secrets-generator
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion
-  tag: ""
+  tag: "@sha256:cc4735e13ed1c06efed86485caefa274e953afadcaa622a3574fce38a69b0957"
 
 imagePullSecrets: []
 nameOverride: ""
