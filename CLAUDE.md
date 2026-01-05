@@ -412,28 +412,6 @@ Helm chart available at `helm/vault-secrets-generator/`. Typically deployed as a
 - [ ] Kubernetes auth testing
 - [ ] AppRole auth testing
 
-### Dependency Management (Renovate)
-
-Renovate GitHub App auto-updates dependencies with automerge:
-- **GitHub Actions** - Pinned to SHA for security
-- **Go dependencies** - go.mod/go.sum
-- **Docker images** - Pinned to digest for security
-
-**Schedule:** Weekly on Monday mornings. Security vulnerabilities: immediate PRs.
-
-**Automerge:** Enabled for patch/minor updates. Major updates require manual review.
-
-**Config:** `.github/renovate.json5`
-
-**GitHub Apps:**
-- [Renovate](https://github.com/apps/renovate) - Dependency updates
-- [Renovate Approve](https://github.com/apps/renovate-approve) - Auto-approves PRs for automerge
-
-**Repository Settings:**
-- Actions restricted to: `actions/*`, `docker/*`, `golangci/*`, `goreleaser/*`, `step-security/*`
-- SHA pinning required for all actions
-- Branch protection requires 1 CODEOWNER review + status checks
-
 ## Password Hashing Functions
 
 Native password hashing functions that can reference other keys in the same secret block. This enables generating a password and its hash in a single declarative config.
