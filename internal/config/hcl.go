@@ -1066,12 +1066,22 @@ func ctyValueToValue(val cty.Value) (Value, error) {
 			memory, _ := valMap["_memory"].AsBigFloat().Int64()
 			iterations, _ := valMap["_iterations"].AsBigFloat().Int64()
 			parallelism, _ := valMap["_parallelism"].AsBigFloat().Int64()
+			// Validate bounds for safe conversion
+			if memory < 0 || memory > 0xFFFFFFFF {
+				return Value{}, fmt.Errorf("argon2 memory out of range: %d", memory)
+			}
+			if iterations < 0 || iterations > 0xFFFFFFFF {
+				return Value{}, fmt.Errorf("argon2 iterations out of range: %d", iterations)
+			}
+			if parallelism < 0 || parallelism > 255 {
+				return Value{}, fmt.Errorf("argon2 parallelism out of range: %d", parallelism)
+			}
 			v.Argon2 = &Argon2Config{
 				FromKey:     valMap["_from"].AsString(),
 				Variant:     valMap["_variant"].AsString(),
-				Memory:      uint32(memory),
-				Iterations:  uint32(iterations),
-				Parallelism: uint8(parallelism),
+				Memory:      uint32(memory),     // #nosec G115 -- bounds checked above
+				Iterations:  uint32(iterations), // #nosec G115 -- bounds checked above
+				Parallelism: uint8(parallelism), // #nosec G115 -- bounds checked above
 			}
 
 		case "pbkdf2":

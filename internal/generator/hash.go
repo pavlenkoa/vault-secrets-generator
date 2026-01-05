@@ -11,10 +11,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pavlenkoa/vault-secrets-generator/internal/config"
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/crypto/pbkdf2"
+
+	"github.com/pavlenkoa/vault-secrets-generator/internal/config"
 )
 
 const (
@@ -120,11 +121,13 @@ func VerifyArgon2(hash, password string) bool {
 	}
 
 	// Recompute hash with same parameters
+	// #nosec G115 -- key length from decoded hash is always small (16-64 bytes)
+	keyLen := uint32(len(key))
 	var computedKey []byte
 	if variant == "id" {
-		computedKey = argon2.IDKey([]byte(password), salt, iterations, memory, parallelism, uint32(len(key)))
+		computedKey = argon2.IDKey([]byte(password), salt, iterations, memory, parallelism, keyLen)
 	} else {
-		computedKey = argon2.Key([]byte(password), salt, iterations, memory, parallelism, uint32(len(key)))
+		computedKey = argon2.Key([]byte(password), salt, iterations, memory, parallelism, keyLen)
 	}
 
 	// Constant-time comparison
@@ -174,10 +177,14 @@ func parseArgon2Hash(hash string) (variant string, memory, iterations uint32, pa
 		}
 		switch kv[0] {
 		case "m":
-			memory = uint32(val)
+			memory = uint32(val) // #nosec G115 -- ParseUint with bitSize 32 ensures val fits
 		case "t":
-			iterations = uint32(val)
+			iterations = uint32(val) // #nosec G115 -- ParseUint with bitSize 32 ensures val fits
 		case "p":
+			if val > 255 {
+				err = fmt.Errorf("invalid argon2 parallelism: %d exceeds uint8 max", val)
+				return
+			}
 			parallelism = uint8(val)
 		}
 	}

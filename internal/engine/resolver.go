@@ -38,11 +38,11 @@ func NewResolver(fetchers *fetcher.Registry, vaultReader VaultReader, defaults c
 
 // ResolveResult contains the resolved value and metadata.
 type ResolveResult struct {
-	Value      string
-	Source     ValueSource
-	Strategy   config.Strategy
-	StaleHash  bool   // True if hash doesn't verify but strategy=create prevented update
-	FromKey    string // For hash types, the key that was hashed
+	Value     string
+	Source    ValueSource
+	Strategy  config.Strategy
+	StaleHash bool   // True if hash doesn't verify but strategy=create prevented update
+	FromKey   string // For hash types, the key that was hashed
 }
 
 // ValueSource indicates where a value came from.
