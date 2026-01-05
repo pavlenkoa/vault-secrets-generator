@@ -52,6 +52,11 @@
       "description": "Don't automerge major updates",
       "matchUpdateTypes": ["major"],
       "automerge": false
+    },
+    {
+      "description": "Disable helm-values manager - digest pinning incompatible with template concatenation",
+      "matchManagers": ["helm-values"],
+      "enabled": false
     }
   ]
 }

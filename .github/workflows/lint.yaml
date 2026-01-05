@@ -12,18 +12,32 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - '**.go'
-      - 'go.*'
-      - '.golangci.yaml'
-      - '.github/workflows/lint.yaml'
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            go:
+              - '**.go'
+              - 'go.*'
+              - '.golangci.yaml'
+              - '.github/workflows/lint.yaml'
+
   lint:
     name: Lint & Test
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
