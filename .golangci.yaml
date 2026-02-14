@@ -69,6 +69,10 @@ linters:
         linters:
           - govet
 
+      - text: 'var-naming: avoid package names that conflict with Go standard library'
+        linters:
+          - revive
+
 formatters:
   enable:
     - gofmt
