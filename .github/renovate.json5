@@ -59,8 +59,8 @@
       "enabled": false
     },
     {
-      "description": "Skip stability wait for digest pins - digests are immutable",
-      "matchUpdateTypes": ["pinDigest", "pin"],
+      "description": "Skip stability wait for digest updates - digests are immutable",
+      "matchUpdateTypes": ["digest", "pinDigest", "pin"],
       "minimumReleaseAge": null
     }
   ]
