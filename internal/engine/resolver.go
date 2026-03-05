@@ -131,7 +131,7 @@ func (r *Resolver) getDefaultStrategy(valueType config.ValueType) config.Strateg
 // resolveStatic returns a static value.
 func (r *Resolver) resolveStatic(val config.Value, existingValue string, strategy config.Strategy) (*ResolveResult, error) {
 	// Apply strategy
-	if existingValue != "" && strategy == config.StrategyCreate && existingValue == val.Static {
+	if existingValue != "" && strategy == config.StrategyCreate {
 		return &ResolveResult{
 			Value:    existingValue,
 			Source:   SourceExisting,

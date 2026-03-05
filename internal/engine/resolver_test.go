@@ -34,6 +34,57 @@ func TestResolver_ResolveStatic(t *testing.T) {
 	}
 }
 
+func TestResolver_ResolveStatic_StrategyCreate(t *testing.T) {
+	registry := fetcher.NewRegistry()
+	defaults := config.DefaultPasswordPolicy()
+	strategies := config.DefaultStrategyDefaults()
+	resolver := NewResolver(registry, nil, defaults, strategies)
+
+	ctx := context.Background()
+
+	val := config.Value{
+		Type:     config.ValueTypeStatic,
+		Static:   "rabbit",
+		Strategy: config.StrategyCreate,
+	}
+
+	// When existing value differs from static value, strategy=create should keep existing
+	result, err := resolver.Resolve(ctx, val, "elastic_rabbitmq", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Value != "elastic_rabbitmq" {
+		t.Errorf("expected existing value 'elastic_rabbitmq', got %q", result.Value)
+	}
+	if result.Source != SourceExisting {
+		t.Errorf("expected SourceExisting, got %s", result.Source)
+	}
+
+	// When existing value matches static value, strategy=create should also keep existing
+	result, err = resolver.Resolve(ctx, val, "rabbit", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Value != "rabbit" {
+		t.Errorf("expected existing value 'rabbit', got %q", result.Value)
+	}
+	if result.Source != SourceExisting {
+		t.Errorf("expected SourceExisting, got %s", result.Source)
+	}
+
+	// When no existing value, strategy=create should write the static value
+	result, err = resolver.Resolve(ctx, val, "", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Value != "rabbit" {
+		t.Errorf("expected 'rabbit', got %q", result.Value)
+	}
+	if result.Source != SourceStatic {
+		t.Errorf("expected SourceStatic, got %s", result.Source)
+	}
+}
+
 func TestResolver_ResolveGenerate(t *testing.T) {
 	registry := fetcher.NewRegistry()
 	defaults := config.DefaultPasswordPolicy()
