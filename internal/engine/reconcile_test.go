@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/pavlenkoa/vault-secrets-generator/internal/config"
@@ -173,6 +174,81 @@ func TestShouldProcessBlock(t *testing.T) {
 			result := shouldProcessBlock(tt.block, tt.opts)
 			if result != tt.expected {
 				t.Errorf("shouldProcessBlock() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestCheckDuplicatePaths(t *testing.T) {
+	falseVal := false
+
+	tests := []struct {
+		name      string
+		secrets   map[string]config.SecretBlock
+		opts      Options
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name: "two enabled blocks same path returns error",
+			secrets: map[string]config.SecretBlock{
+				"block-a": {Name: "block-a", Mount: "secret", Path: "app"},
+				"block-b": {Name: "block-b", Mount: "secret", Path: "app"},
+			},
+			opts:      Options{},
+			wantErr:   true,
+			errSubstr: `multiple secret blocks target the same Vault path "secret/app"`,
+		},
+		{
+			name: "different paths is ok",
+			secrets: map[string]config.SecretBlock{
+				"block-a": {Name: "block-a", Mount: "secret", Path: "app-a"},
+				"block-b": {Name: "block-b", Mount: "secret", Path: "app-b"},
+			},
+			opts:    Options{},
+			wantErr: false,
+		},
+		{
+			name: "same path but one disabled is ok",
+			secrets: map[string]config.SecretBlock{
+				"block-a": {Name: "block-a", Mount: "secret", Path: "app"},
+				"block-b": {Name: "block-b", Mount: "secret", Path: "app", Enabled: &falseVal},
+			},
+			opts:    Options{},
+			wantErr: false,
+		},
+		{
+			name: "same path but one excluded is ok",
+			secrets: map[string]config.SecretBlock{
+				"block-a": {Name: "block-a", Mount: "secret", Path: "app"},
+				"block-b": {Name: "block-b", Mount: "secret", Path: "app"},
+			},
+			opts:    Options{Exclude: []string{"block-b"}},
+			wantErr: false,
+		},
+		{
+			name: "same path but only one targeted is ok",
+			secrets: map[string]config.SecretBlock{
+				"block-a": {Name: "block-a", Mount: "secret", Path: "app"},
+				"block-b": {Name: "block-b", Mount: "secret", Path: "app"},
+			},
+			opts:    Options{Target: []string{"block-a"}},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := checkDuplicatePaths(tt.secrets, tt.opts)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tt.errSubstr) {
+					t.Errorf("error %q should contain %q", err.Error(), tt.errSubstr)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
 			}
 		})
 	}

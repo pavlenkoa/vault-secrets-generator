@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 
 	"github.com/pavlenkoa/vault-secrets-generator/internal/config"
@@ -133,10 +134,36 @@ func shouldProcessBlock(block config.SecretBlock, opts Options) bool {
 	return block.IsEnabled()
 }
 
+// checkDuplicatePaths returns an error if multiple processable secret blocks
+// target the same mount+path combination.
+func checkDuplicatePaths(secrets map[string]config.SecretBlock, opts Options) error {
+	pathBlocks := make(map[string][]string) // "mount/path" -> []block names
+	for name, block := range secrets {
+		if !shouldProcessBlock(block, opts) {
+			continue
+		}
+		pk := block.Mount + "/" + block.Path
+		pathBlocks[pk] = append(pathBlocks[pk], name)
+	}
+	for pk, names := range pathBlocks {
+		if len(names) > 1 {
+			sort.Strings(names)
+			return fmt.Errorf("multiple secret blocks target the same Vault path %q: %s — combine them into a single secret block",
+				pk, strings.Join(names, ", "))
+		}
+	}
+	return nil
+}
+
 // Reconcile processes the configuration and syncs secrets to Vault.
 func (e *Engine) Reconcile(ctx context.Context, cfg *config.Config, opts Options) (*Result, error) {
 	result := &Result{
 		Diff: &Diff{},
+	}
+
+	// Detect duplicate paths among blocks that will be processed
+	if err := checkDuplicatePaths(cfg.Secrets, opts); err != nil {
+		return nil, err
 	}
 
 	for name, block := range cfg.Secrets {
