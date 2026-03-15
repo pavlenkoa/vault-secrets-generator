@@ -1,4 +1,4 @@
-.PHONY: build test lint lint-fix ensure-golangci-lint clean docker docker-push install help
+.PHONY: build test lint lint-fix ensure-golangci-lint clean docker docker-push install help tag
 
 # Variables
 BINARY_NAME := vsg
@@ -107,6 +107,15 @@ docker:
 docker-push: docker
 	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
 	docker push $(DOCKER_IMAGE):latest
+
+## tag: Bump Helm chart appVersion, commit, and create git tag (Usage: make tag VERSION=2.3.0)
+tag:
+	@test -n "$(TAG)" || (echo "Usage: make tag TAG=2.3.0" && exit 1)
+	@sed -i 's/^appVersion:.*/appVersion: "$(TAG)"/' helm/vault-secrets-generator/Chart.yaml
+	@git add helm/vault-secrets-generator/Chart.yaml
+	@git commit -m "chore: bump helm chart appVersion to $(TAG)"
+	@git tag v$(TAG)
+	@echo "Created tag v$(TAG). Run: git push origin main v$(TAG)"
 
 ## release-snapshot: Build a snapshot release with goreleaser
 release-snapshot:

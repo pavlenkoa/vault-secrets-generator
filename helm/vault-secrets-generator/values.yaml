@@ -21,12 +21,14 @@ serviceAccount:
 
 # Job configuration
 job:
-  # Annotations for the Job (e.g., ArgoCD sync waves)
-  annotations: {}
+  # Annotations for the Job (e.g., ArgoCD sync hooks)
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
   # How many times to retry on failure
   backoffLimit: 3
-  # Delete job after completion (seconds), 0 to keep forever
-  ttlSecondsAfterFinished: 300
+  # Delete job after completion (seconds), empty string to disable
+  ttlSecondsAfterFinished: ""
 
 # VSG configuration (HCL format)
 config:
