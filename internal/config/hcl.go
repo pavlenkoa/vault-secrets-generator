@@ -150,6 +150,7 @@ var valueMarkerType = cty.Object(map[string]cty.Type{
 	"_memory":       cty.Number,
 	"_iterations":   cty.Number,
 	"_parallelism":  cty.Number,
+	"_encoding":     cty.String,
 })
 
 // makeGenerateFunction creates the generate() function
@@ -182,6 +183,7 @@ func makeGenerateFunction() function.Function {
 				"_memory":       cty.NumberIntVal(0),
 				"_iterations":   cty.NumberIntVal(0),
 				"_parallelism":  cty.NumberIntVal(0),
+				"_encoding":     cty.StringVal(""),
 			}
 
 			// Parse named arguments from varargs
@@ -260,6 +262,7 @@ func makeSourceFunction(sourceType string) function.Function {
 				"_memory":       cty.NumberIntVal(0),
 				"_iterations":   cty.NumberIntVal(0),
 				"_parallelism":  cty.NumberIntVal(0),
+				"_encoding":     cty.StringVal(""),
 			}), nil
 		},
 	})
@@ -310,6 +313,7 @@ func makeRawFunction() function.Function {
 				"_memory":       cty.NumberIntVal(0),
 				"_iterations":   cty.NumberIntVal(0),
 				"_parallelism":  cty.NumberIntVal(0),
+				"_encoding":     cty.StringVal(""),
 			}), nil
 		},
 	})
@@ -362,6 +366,7 @@ func makeVaultFunction() function.Function {
 				"_memory":       cty.NumberIntVal(0),
 				"_iterations":   cty.NumberIntVal(0),
 				"_parallelism":  cty.NumberIntVal(0),
+				"_encoding":     cty.StringVal(""),
 			}), nil
 		},
 	})
@@ -412,6 +417,7 @@ func makeCommandFunction() function.Function {
 				"_memory":       cty.NumberIntVal(0),
 				"_iterations":   cty.NumberIntVal(0),
 				"_parallelism":  cty.NumberIntVal(0),
+				"_encoding":     cty.StringVal(""),
 			}), nil
 		},
 	})
@@ -447,6 +453,7 @@ func makeBcryptFunction() function.Function {
 				"_memory":       cty.NumberIntVal(0),
 				"_iterations":   cty.NumberIntVal(0),
 				"_parallelism":  cty.NumberIntVal(0),
+				"_encoding":     cty.StringVal(""),
 			}
 
 			// Parse options from varargs
@@ -505,6 +512,7 @@ func makeArgon2Function() function.Function {
 				"_memory":       cty.NumberIntVal(0),
 				"_iterations":   cty.NumberIntVal(0),
 				"_parallelism":  cty.NumberIntVal(0),
+				"_encoding":     cty.StringVal(""),
 			}
 
 			// Parse options from varargs
@@ -569,6 +577,7 @@ func makePbkdf2Function() function.Function {
 				"_memory":       cty.NumberIntVal(0),
 				"_iterations":   cty.NumberIntVal(0),
 				"_parallelism":  cty.NumberIntVal(0),
+				"_encoding":     cty.StringVal(""),
 			}
 
 			// Parse options from varargs
@@ -582,6 +591,8 @@ func makePbkdf2Function() function.Function {
 							result["_variant"] = v
 						case "iterations":
 							result["_iterations"] = v
+						case "encoding":
+							result["_encoding"] = v
 						case "strategy":
 							result["_strategy"] = v
 						}
@@ -1091,6 +1102,7 @@ func ctyValueToValue(val cty.Value) (Value, error) {
 				FromKey:    valMap["_from"].AsString(),
 				Variant:    valMap["_variant"].AsString(),
 				Iterations: int(iterations),
+				Encoding:   valMap["_encoding"].AsString(),
 			}
 
 		default:

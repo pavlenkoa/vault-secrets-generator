@@ -18,6 +18,10 @@ import (
 	"github.com/pavlenkoa/vault-secrets-generator/internal/config"
 )
 
+// cryptBase64Encoding is the adapted base64 encoding used by crypt(3)-style hashes.
+// Uses '.' instead of '+' in the alphabet, no padding. Compatible with Authelia/go-crypt.
+var cryptBase64Encoding = base64.NewEncoding("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./").WithPadding(base64.NoPadding)
+
 const (
 	// Default bcrypt cost
 	defaultBcryptCost = 12
@@ -245,8 +249,16 @@ func HashPbkdf2(password string, cfg config.Pbkdf2Config) (string, error) {
 
 	// Encode in PHC format
 	// $pbkdf2-sha512$310000$salt$hash
-	b64Salt := base64.RawStdEncoding.EncodeToString(salt)
-	b64Key := base64.RawStdEncoding.EncodeToString(key)
+	// encoding=phc (default): RawStdEncoding (PHC spec, no padding, +/ alphabet)
+	// encoding=crypt: crypt-adapted base64 (no padding, ./ alphabet, Authelia/go-crypt compatible)
+	var b64Salt, b64Key string
+	if cfg.Encoding == "crypt" {
+		b64Salt = cryptBase64Encoding.EncodeToString(salt)
+		b64Key = cryptBase64Encoding.EncodeToString(key)
+	} else {
+		b64Salt = base64.RawStdEncoding.EncodeToString(salt)
+		b64Key = base64.RawStdEncoding.EncodeToString(key)
+	}
 
 	return fmt.Sprintf("$pbkdf2-%s$%d$%s$%s", variant, iterations, b64Salt, b64Key), nil
 }
@@ -271,6 +283,20 @@ func VerifyPbkdf2(hash, password string) bool {
 
 	// Constant-time comparison
 	return subtle.ConstantTimeCompare(key, computedKey) == 1
+}
+
+// decodeBase64Flexible decodes base64 strings in any common encoding variant.
+func decodeBase64Flexible(s string) ([]byte, error) {
+	// Try crypt-adapted base64 (Authelia/go-crypt format: ./ alphabet, no padding)
+	if b, err := cryptBase64Encoding.DecodeString(s); err == nil {
+		return b, nil
+	}
+	// Try standard with padding
+	if b, err := base64.StdEncoding.DecodeString(s); err == nil {
+		return b, nil
+	}
+	// Fall back to standard without padding (PHC spec)
+	return base64.RawStdEncoding.DecodeString(s)
 }
 
 // parsePbkdf2Hash parses a PHC-format PBKDF2 hash string.
@@ -301,15 +327,15 @@ func parsePbkdf2Hash(hash string) (variant string, iterations int, salt, key []b
 		return
 	}
 
-	// parts[3] is base64-encoded salt
-	salt, err = base64.RawStdEncoding.DecodeString(parts[3])
+	// parts[3] is base64-encoded salt (accept both padded and unpadded)
+	salt, err = decodeBase64Flexible(parts[3])
 	if err != nil {
 		err = fmt.Errorf("invalid pbkdf2 salt: %w", err)
 		return
 	}
 
-	// parts[4] is base64-encoded key
-	key, err = base64.RawStdEncoding.DecodeString(parts[4])
+	// parts[4] is base64-encoded key (accept both padded and unpadded)
+	key, err = decodeBase64Flexible(parts[4])
 	if err != nil {
 		err = fmt.Errorf("invalid pbkdf2 key: %w", err)
 		return

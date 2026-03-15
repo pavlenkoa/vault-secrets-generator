@@ -171,6 +171,11 @@ type Pbkdf2Config struct {
 
 	// Iterations is the number of iterations (default: 310000)
 	Iterations int
+
+	// Encoding is the base64 encoding for salt and key:
+	// "phc" (default) - PHC spec format, +/ alphabet, no padding
+	// "crypt" - crypt(3)-adapted format, ./ alphabet, no padding (Authelia/go-crypt compatible)
+	Encoding string
 }
 
 // SecretBlock represents a group of secrets at a Vault path.
