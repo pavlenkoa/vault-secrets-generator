@@ -29,7 +29,7 @@ spec:
       serviceAccountName: {{ include "vault-secrets-generator.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      restartPolicy: OnFailure
+      restartPolicy: Never
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
