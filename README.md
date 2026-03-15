@@ -1,6 +1,6 @@
 # VSG - Vault Secrets Generator
 
-> **Vibecoded with [Claude Code](https://github.com/anthropics/claude-code) using Claude Opus 4.5**
+> **Vibecoded with [Claude Code](https://github.com/anthropics/claude-code)**
 
 A lightweight, cloud-agnostic CLI tool that generates and populates secrets in HashiCorp Vault from various sources including remote files, generated passwords, commands, and static values.
 
