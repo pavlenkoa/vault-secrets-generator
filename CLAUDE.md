@@ -446,7 +446,7 @@ secret "authelia" {
 |----------|---------------|-----------|
 | `bcrypt({from, cost})` | `$2a$cost$salt...hash` | Most web frameworks (Rails, Django, Node.js) |
 | `argon2({from, variant, memory, iterations, parallelism})` | `$argon2id$v=19$m=65536,t=3,p=4$salt$hash` | Authelia, Bitwarden, modern apps |
-| `pbkdf2({from, variant, iterations})` | `$pbkdf2-sha512$iterations$salt$hash` | Enterprise/FIPS compliance, Authelia OIDC |
+| `pbkdf2({from, variant, iterations, encoding})` | `$pbkdf2-sha512$iterations$salt$hash` | Enterprise/FIPS compliance, Authelia OIDC |
 
 ### Default Parameters
 
@@ -459,6 +459,7 @@ secret "authelia" {
 | argon2 | parallelism | 4 |
 | pbkdf2 | variant | sha512 |
 | pbkdf2 | iterations | 310000 |
+| pbkdf2 | encoding | phc |
 
 ### Strategy Behavior
 
@@ -474,4 +475,7 @@ Hash functions use `update` strategy by default (like other derived values):
 - **Cycle detection**: Circular references are detected at parse time
 - **Missing references**: Error at parse time if `from` references a non-existent key
 - **PHC format**: All hashes use Password Hashing Competition string format
+- **PBKDF2 encoding**: Two base64 encodings available via `encoding` parameter:
+  - `"phc"` (default) — standard base64 alphabet (`+/`), no padding. PHC spec compliant.
+  - `"crypt"` — crypt(3)-adapted alphabet (`./`), no padding. Compatible with Authelia and go-crypt.
 - **Dependency ordering**: Source keys are always resolved before dependent hashes

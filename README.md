@@ -481,6 +481,7 @@ secret "app" {
 | `from` | (required) | Key name to hash |
 | `variant` | `sha512` | `sha256` or `sha512` |
 | `iterations` | 310000 | Number of iterations |
+| `encoding` | `phc` | Base64 encoding: `phc` (standard `+/` alphabet) or `crypt` (crypt(3) `./` alphabet, Authelia compatible) |
 
 Hash functions use **verification** to determine updates - if the existing hash verifies against the current password, no update occurs (avoiding unnecessary secret version bumps).
 
