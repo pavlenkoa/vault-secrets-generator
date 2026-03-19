@@ -172,13 +172,13 @@ func FormatDiff(diff *Diff) string {
 		for _, change := range block.Changes {
 			switch change.Change {
 			case ChangeAdd:
-				sb.WriteString(fmt.Sprintf("  + %s = %s [%s]\n", change.Key, change.NewMasked, change.Source))
+				fmt.Fprintf(&sb, "  + %s = %s [%s]\n", change.Key, change.NewMasked, change.Source)
 			case ChangeUpdate:
-				sb.WriteString(fmt.Sprintf("  ~ %s: %s -> %s [%s]\n", change.Key, change.OldMasked, change.NewMasked, change.Source))
+				fmt.Fprintf(&sb, "  ~ %s: %s -> %s [%s]\n", change.Key, change.OldMasked, change.NewMasked, change.Source)
 			case ChangeDelete:
-				sb.WriteString(fmt.Sprintf("  - %s = %s [pruned]\n", change.Key, change.OldMasked))
+				fmt.Fprintf(&sb, "  - %s = %s [pruned]\n", change.Key, change.OldMasked)
 			case ChangeUnmanaged:
-				sb.WriteString(fmt.Sprintf("  ? %s = %s [unmanaged]\n", change.Key, change.OldMasked))
+				fmt.Fprintf(&sb, "  ? %s = %s [unmanaged]\n", change.Key, change.OldMasked)
 			case ChangeNone:
 				// Don't show unchanged in normal output
 			}
@@ -186,8 +186,8 @@ func FormatDiff(diff *Diff) string {
 	}
 
 	adds, updates, deletes, unmanaged, unchanged := diff.Summary()
-	sb.WriteString(fmt.Sprintf("\nSummary: %d to add, %d to update, %d to delete, %d unmanaged, %d unchanged\n",
-		adds, updates, deletes, unmanaged, unchanged))
+	fmt.Fprintf(&sb, "\nSummary: %d to add, %d to update, %d to delete, %d unmanaged, %d unchanged\n",
+		adds, updates, deletes, unmanaged, unchanged)
 
 	return sb.String()
 }
@@ -206,22 +206,22 @@ func FormatDiffVerbose(diff *Diff) string {
 		for _, change := range block.Changes {
 			switch change.Change {
 			case ChangeAdd:
-				sb.WriteString(fmt.Sprintf("  + %s = %s [%s]\n", change.Key, change.NewMasked, change.Source))
+				fmt.Fprintf(&sb, "  + %s = %s [%s]\n", change.Key, change.NewMasked, change.Source)
 			case ChangeUpdate:
-				sb.WriteString(fmt.Sprintf("  ~ %s: %s -> %s [%s]\n", change.Key, change.OldMasked, change.NewMasked, change.Source))
+				fmt.Fprintf(&sb, "  ~ %s: %s -> %s [%s]\n", change.Key, change.OldMasked, change.NewMasked, change.Source)
 			case ChangeDelete:
-				sb.WriteString(fmt.Sprintf("  - %s = %s [pruned]\n", change.Key, change.OldMasked))
+				fmt.Fprintf(&sb, "  - %s = %s [pruned]\n", change.Key, change.OldMasked)
 			case ChangeUnmanaged:
-				sb.WriteString(fmt.Sprintf("  ? %s = %s [unmanaged]\n", change.Key, change.OldMasked))
+				fmt.Fprintf(&sb, "  ? %s = %s [unmanaged]\n", change.Key, change.OldMasked)
 			case ChangeNone:
-				sb.WriteString(fmt.Sprintf("    %s = %s [%s]\n", change.Key, change.OldMasked, change.Source))
+				fmt.Fprintf(&sb, "    %s = %s [%s]\n", change.Key, change.OldMasked, change.Source)
 			}
 		}
 	}
 
 	adds, updates, deletes, unmanaged, unchanged := diff.Summary()
-	sb.WriteString(fmt.Sprintf("\nSummary: %d to add, %d to update, %d to delete, %d unmanaged, %d unchanged\n",
-		adds, updates, deletes, unmanaged, unchanged))
+	fmt.Fprintf(&sb, "\nSummary: %d to add, %d to update, %d to delete, %d unmanaged, %d unchanged\n",
+		adds, updates, deletes, unmanaged, unchanged)
 
 	return sb.String()
 }

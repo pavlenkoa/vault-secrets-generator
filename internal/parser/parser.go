@@ -156,7 +156,7 @@ func pathUpTo(parts []pathPart, i int) string {
 	var sb strings.Builder
 	for j := 0; j <= i && j < len(parts); j++ {
 		if parts[j].isArray {
-			sb.WriteString(fmt.Sprintf("[%d]", parts[j].index))
+			fmt.Fprintf(&sb, "[%d]", parts[j].index)
 		} else {
 			if sb.Len() > 0 {
 				sb.WriteString(".")
