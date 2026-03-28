@@ -101,6 +101,36 @@ secret "test-secret" {
 	}
 }
 
+func TestParseHCL_GenerateZeroSymbolsKeepsSentinelForDigits(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password = generate({symbols = 0})
+  }
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val := cfg.Secrets["test-secret"].Content["password"]
+	if val.Generate == nil {
+		t.Fatal("expected generate policy to be set")
+	}
+	if val.Generate.Symbols != 0 {
+		t.Errorf("expected symbols=0, got %d", val.Generate.Symbols)
+	}
+	// Digits was not set by user, so it must be -1 (sentinel) to allow
+	// mergePolicy to correctly apply defaults
+	if val.Generate.Digits != -1 {
+		t.Errorf("expected digits=-1 (sentinel for unset), got %d", val.Generate.Digits)
+	}
+}
+
 func TestParseHCL_JSONFunction(t *testing.T) {
 	hcl := `
 secret "test-secret" {
@@ -1093,5 +1123,72 @@ secret "test-secret" {
 	}
 	if cfg.Secrets["test-secret"].Content["pbkdf2_hash"].Type != ValueTypePbkdf2 {
 		t.Error("expected pbkdf2 type for pbkdf2_hash")
+	}
+}
+
+func TestParseHCL_DefaultsGenerateZeroSymbols(t *testing.T) {
+	hcl := `
+defaults {
+  generate {
+    length  = 20
+    digits  = 5
+    symbols = 0
+  }
+}
+
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password = generate()
+  }
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.Defaults.Generate.Symbols != 0 {
+		t.Errorf("expected defaults symbols=0, got %d", cfg.Defaults.Generate.Symbols)
+	}
+	if cfg.Defaults.Generate.Digits != 5 {
+		t.Errorf("expected defaults digits=5, got %d", cfg.Defaults.Generate.Digits)
+	}
+	if cfg.Defaults.Generate.Length != 20 {
+		t.Errorf("expected defaults length=20, got %d", cfg.Defaults.Generate.Length)
+	}
+}
+
+func TestParseHCL_DefaultsGenerateZeroDigits(t *testing.T) {
+	hcl := `
+defaults {
+  generate {
+    length  = 20
+    digits  = 0
+    symbols = 5
+  }
+}
+
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password = generate()
+  }
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.Defaults.Generate.Digits != 0 {
+		t.Errorf("expected defaults digits=0, got %d", cfg.Defaults.Generate.Digits)
+	}
+	if cfg.Defaults.Generate.Symbols != 5 {
+		t.Errorf("expected defaults symbols=5, got %d", cfg.Defaults.Generate.Symbols)
 	}
 }

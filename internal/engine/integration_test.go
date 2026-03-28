@@ -64,6 +64,7 @@ func TestIntegration_Reconcile(t *testing.T) {
 						Type: config.ValueTypeGenerate,
 						Generate: &config.PasswordPolicy{
 							Length:  16,
+							Digits:  -1, // not set, use default
 							Symbols: 0,
 						},
 					},
@@ -170,7 +171,9 @@ func TestIntegration_ReconcileWithForce(t *testing.T) {
 					"password": {
 						Type: config.ValueTypeGenerate,
 						Generate: &config.PasswordPolicy{
-							Length: 20,
+							Length:  20,
+							Digits:  -1, // not set, use default
+							Symbols: -1, // not set, use default
 						},
 					},
 				},

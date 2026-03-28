@@ -31,6 +31,12 @@ func ParseHCL(data []byte, filename string, vars Variables) (*Config, error) {
 
 	cfg := &Config{
 		Secrets: make(map[string]SecretBlock),
+		Defaults: Defaults{
+			Generate: PasswordPolicy{
+				Digits:  -1, // sentinel: not set
+				Symbols: -1, // sentinel: not set
+			},
+		},
 	}
 
 	// Process blocks
@@ -803,7 +809,10 @@ func parseStrategyBlock(block *hcl.Block, evalCtx *hcl.EvalContext) (*StrategyDe
 
 // parseGenerateBlock parses the generate defaults block
 func parseGenerateBlock(block *hcl.Block, evalCtx *hcl.EvalContext) (*PasswordPolicy, error) {
-	policy := DefaultPasswordPolicy()
+	policy := PasswordPolicy{
+		Digits:  -1, // sentinel: not set
+		Symbols: -1, // sentinel: not set
+	}
 
 	content, diags := block.Body.Content(&hcl.BodySchema{
 		Attributes: []hcl.AttributeSchema{
@@ -1023,7 +1032,10 @@ func ctyValueToValue(val cty.Value) (Value, error) {
 
 			// Only set policy if any non-default values
 			if length > 0 || digits >= 0 || symbols >= 0 || symbolSet != "" || noUpper || !allowRepeat {
-				policy := &PasswordPolicy{}
+				policy := &PasswordPolicy{
+					Digits:  -1, // sentinel: not set
+					Symbols: -1, // sentinel: not set
+				}
 				if length > 0 {
 					policy.Length = int(length)
 				}
@@ -1132,10 +1144,10 @@ func applyDefaults(cfg *Config) {
 	if cfg.Defaults.Generate.Length == 0 {
 		cfg.Defaults.Generate.Length = defaults.Length
 	}
-	if cfg.Defaults.Generate.Digits == 0 {
+	if cfg.Defaults.Generate.Digits < 0 {
 		cfg.Defaults.Generate.Digits = defaults.Digits
 	}
-	if cfg.Defaults.Generate.Symbols == 0 {
+	if cfg.Defaults.Generate.Symbols < 0 {
 		cfg.Defaults.Generate.Symbols = defaults.Symbols
 	}
 	if cfg.Defaults.Generate.SymbolCharacters == "" {

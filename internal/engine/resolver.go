@@ -184,12 +184,10 @@ func mergePolicy(defaults, custom config.PasswordPolicy) config.PasswordPolicy {
 	if custom.Length > 0 {
 		result.Length = custom.Length
 	}
-	if custom.Digits > 0 {
+	if custom.Digits >= 0 {
 		result.Digits = custom.Digits
 	}
-	// Symbols can be 0 intentionally, so we check differently
-	// If the custom policy has any non-default fields set, use its Symbols value
-	if custom.Length > 0 || custom.Digits > 0 || custom.SymbolCharacters != "" || custom.NoUpper || custom.AllowRepeat != nil {
+	if custom.Symbols >= 0 {
 		result.Symbols = custom.Symbols
 	}
 	if custom.SymbolCharacters != "" {

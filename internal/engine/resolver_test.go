@@ -122,6 +122,7 @@ func TestResolver_ResolveGenerateWithParams(t *testing.T) {
 		Type: config.ValueTypeGenerate,
 		Generate: &config.PasswordPolicy{
 			Length:  16,
+			Digits:  -1, // not set, use default
 			Symbols: 0,
 		},
 	}
@@ -337,6 +338,52 @@ func TestResolver_ResolveGenerateWithUpdateStrategy(t *testing.T) {
 	}
 	if result.Source != SourceGenerated {
 		t.Errorf("expected SourceGenerated, got %s", result.Source)
+	}
+}
+
+func TestMergePolicy_ZeroDigitsAndSymbols(t *testing.T) {
+	defaults := config.DefaultPasswordPolicy() // digits=5, symbols=5
+
+	// Per-value generate({digits = 0, symbols = 0}) produces a policy with 0 values
+	custom := config.PasswordPolicy{
+		Length:  20,
+		Digits:  0,
+		Symbols: 0,
+	}
+
+	result := mergePolicy(defaults, custom)
+
+	if result.Digits != 0 {
+		t.Errorf("expected digits=0, got %d", result.Digits)
+	}
+	if result.Symbols != 0 {
+		t.Errorf("expected symbols=0, got %d", result.Symbols)
+	}
+	if result.Length != 20 {
+		t.Errorf("expected length=20, got %d", result.Length)
+	}
+}
+
+func TestMergePolicy_ZeroSymbolsDefaultDigits(t *testing.T) {
+	defaults := config.DefaultPasswordPolicy() // digits=5, symbols=5
+
+	// Per-value generate({symbols = 0}) — only symbols set, digits should inherit
+	custom := config.PasswordPolicy{
+		Length:  20,
+		Digits:  -1, // not set by user, should inherit default
+		Symbols: 0,  // explicitly zero
+	}
+
+	result := mergePolicy(defaults, custom)
+
+	if result.Digits != 5 {
+		t.Errorf("expected digits=5 (from defaults), got %d", result.Digits)
+	}
+	if result.Symbols != 0 {
+		t.Errorf("expected symbols=0, got %d", result.Symbols)
+	}
+	if result.Length != 20 {
+		t.Errorf("expected length=20, got %d", result.Length)
 	}
 }
 
