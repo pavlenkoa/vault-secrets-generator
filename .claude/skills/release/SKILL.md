@@ -12,12 +12,14 @@ Releases use `make tag` to bump the Helm chart appVersion and create a git tag i
 ## Steps
 
 1. Ensure all changes are committed and pushed to main
-2. Run: `make tag TAG=x.y.z`
+2. Check the current version from git tags: `git tag --list 'v*' --sort=-v:refname | head -1`
+   - Do NOT trust CLAUDE.md or any docs for the current version — git tags are the source of truth
+3. Run: `make tag TAG=x.y.z`
    - Updates `helm/vault-secrets-generator/Chart.yaml` appVersion
    - Commits with `chore: bump helm chart appVersion to x.y.z`
    - Creates git tag `vx.y.z`
-3. Push: `git push origin main vx.y.z`
-4. Verify the [Release workflow](../../.github/workflows/release.yaml) completes successfully
+4. Push: `git push origin main vx.y.z`
+5. Verify the [Release workflow](../../.github/workflows/release.yaml) completes successfully
 
 ## Never Do
 
