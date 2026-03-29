@@ -408,6 +408,7 @@ secret "dev-config" {
 | Bcrypt | `bcrypt({from = "key"})` | Hash value from another key (bcrypt) |
 | Argon2 | `argon2({from = "key"})` | Hash value from another key (argon2) |
 | PBKDF2 | `pbkdf2({from = "key"})` | Hash value from another key (PBKDF2) |
+| SHA1 htpasswd | `sha1_htpasswd({from = "key", username = "user"})` | Generate htpasswd entry in {SHA} format |
 
 All functions support optional strategy parameter via object literal:
 
@@ -483,6 +484,25 @@ secret "app" {
 | `iterations` | 310000 | Number of iterations |
 | `encoding` | `phc` | Base64 encoding: `phc` (standard `+/` alphabet) or `crypt` (crypt(3) `./` alphabet, Authelia compatible) |
 
+**SHA1 htpasswd options:**
+| Option | Default | Description |
+|--------|---------|-------------|
+| `from` | (required) | Key name to hash |
+| `username` | (required*) | Static username for the htpasswd entry |
+| `username_from` | (required*) | Key name to read username from |
+
+*Exactly one of `username` or `username_from` must be specified.
+
+Output format: `username:{SHA}base64_encoded_sha1_hash`
+
+```hcl
+# Static username
+htpasswd = sha1_htpasswd({from = "push_password", username = "promtail"})
+
+# Username from another key
+htpasswd = sha1_htpasswd({from = "push_password", username_from = "push_user"})
+```
+
 Hash functions use **verification** to determine updates - if the existing hash verifies against the current password, no update occurs (avoiding unnecessary secret version bumps).
 
 ### Strategies
@@ -506,6 +526,7 @@ Default strategies by value type:
 | `bcrypt` | `update` | Keep hash in sync with source key |
 | `argon2` | `update` | Keep hash in sync with source key |
 | `pbkdf2` | `update` | Keep hash in sync with source key |
+| `sha1_htpasswd` | `update` | Keep hash in sync with source key |
 
 ### Prune
 

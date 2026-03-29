@@ -1126,6 +1126,166 @@ secret "test-secret" {
 	}
 }
 
+func TestParseHCL_Sha1HtpasswdFunction(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password = generate()
+    htpasswd = sha1_htpasswd({from = "password", username = "promtail"})
+  }
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val := cfg.Secrets["test-secret"].Content["htpasswd"]
+	if val.Type != ValueTypeSha1Htpasswd {
+		t.Errorf("expected sha1_htpasswd type, got %s", val.Type)
+	}
+	if val.Sha1Htpasswd == nil {
+		t.Fatal("expected sha1_htpasswd config to be set")
+	}
+	if val.Sha1Htpasswd.FromKey != "password" {
+		t.Errorf("expected from_key=password, got %s", val.Sha1Htpasswd.FromKey)
+	}
+	if val.Sha1Htpasswd.Username != "promtail" {
+		t.Errorf("expected username=promtail, got %s", val.Sha1Htpasswd.Username)
+	}
+	if val.Sha1Htpasswd.UsernameFromKey != "" {
+		t.Errorf("expected empty username_from, got %s", val.Sha1Htpasswd.UsernameFromKey)
+	}
+}
+
+func TestParseHCL_Sha1HtpasswdUsernameFrom(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    user     = "promtail"
+    password = generate()
+    htpasswd = sha1_htpasswd({from = "password", username_from = "user"})
+  }
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val := cfg.Secrets["test-secret"].Content["htpasswd"]
+	if val.Sha1Htpasswd == nil {
+		t.Fatal("expected sha1_htpasswd config to be set")
+	}
+	if val.Sha1Htpasswd.UsernameFromKey != "user" {
+		t.Errorf("expected username_from=user, got %s", val.Sha1Htpasswd.UsernameFromKey)
+	}
+	if val.Sha1Htpasswd.Username != "" {
+		t.Errorf("expected empty username, got %s", val.Sha1Htpasswd.Username)
+	}
+}
+
+func TestParseHCL_Sha1HtpasswdMissingFrom(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    htpasswd = sha1_htpasswd({username = "admin"})
+  }
+}
+`
+
+	_, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err == nil {
+		t.Fatal("expected error for missing 'from' parameter")
+	}
+}
+
+func TestParseHCL_Sha1HtpasswdMissingUsername(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password = generate()
+    htpasswd = sha1_htpasswd({from = "password"})
+  }
+}
+`
+
+	_, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err == nil {
+		t.Fatal("expected error for missing username/username_from")
+	}
+}
+
+func TestParseHCL_Sha1HtpasswdBothUsernames(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    user     = "admin"
+    password = generate()
+    htpasswd = sha1_htpasswd({from = "password", username = "admin", username_from = "user"})
+  }
+}
+`
+
+	_, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err == nil {
+		t.Fatal("expected error for both username and username_from")
+	}
+}
+
+func TestParseHCL_Sha1HtpasswdWithStrategy(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password = generate()
+    htpasswd = sha1_htpasswd({from = "password", username = "admin", strategy = "create"})
+  }
+}
+`
+
+	cfg, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	val := cfg.Secrets["test-secret"].Content["htpasswd"]
+	if val.Strategy != StrategyCreate {
+		t.Errorf("expected strategy=create, got %s", val.Strategy)
+	}
+}
+
+func TestParseHCL_Sha1HtpasswdUsernameFromMissingKey(t *testing.T) {
+	hcl := `
+secret "test-secret" {
+  path = "test"
+
+  content {
+    password = generate()
+    htpasswd = sha1_htpasswd({from = "password", username_from = "nonexistent"})
+  }
+}
+`
+
+	_, err := ParseHCL([]byte(hcl), "test.hcl", nil)
+	if err == nil {
+		t.Fatal("expected error for username_from referencing non-existent key")
+	}
+}
+
 func TestParseHCL_DefaultsGenerateZeroSymbols(t *testing.T) {
 	hcl := `
 defaults {

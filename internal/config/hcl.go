@@ -100,16 +100,17 @@ var rootSchema = &hcl.BodySchema{
 func buildEvalContext(vars Variables) *hcl.EvalContext {
 	return &hcl.EvalContext{
 		Functions: map[string]function.Function{
-			"env":      makeEnvFunction(vars),
-			"generate": makeGenerateFunction(),
-			"json":     makeSourceFunction("json"),
-			"yaml":     makeSourceFunction("yaml"),
-			"raw":      makeRawFunction(),
-			"vault":    makeVaultFunction(),
-			"command":  makeCommandFunction(),
-			"bcrypt":   makeBcryptFunction(),
-			"argon2":   makeArgon2Function(),
-			"pbkdf2":   makePbkdf2Function(),
+			"env":           makeEnvFunction(vars),
+			"generate":      makeGenerateFunction(),
+			"json":          makeSourceFunction("json"),
+			"yaml":          makeSourceFunction("yaml"),
+			"raw":           makeRawFunction(),
+			"vault":         makeVaultFunction(),
+			"command":       makeCommandFunction(),
+			"bcrypt":        makeBcryptFunction(),
+			"argon2":        makeArgon2Function(),
+			"pbkdf2":        makePbkdf2Function(),
+			"sha1_htpasswd": makeSha1HtpasswdFunction(),
 		},
 	}
 }
@@ -137,26 +138,28 @@ func makeEnvFunction(vars Variables) function.Function {
 
 // valueMarkerType is the cty object type for value markers
 var valueMarkerType = cty.Object(map[string]cty.Type{
-	"_type":         cty.String,
-	"_strategy":     cty.String,
-	"_url":          cty.String,
-	"_query":        cty.String,
-	"_vault_path":   cty.String,
-	"_vault_key":    cty.String,
-	"_command":      cty.String,
-	"_length":       cty.Number,
-	"_digits":       cty.Number,
-	"_symbols":      cty.Number,
-	"_symbol_set":   cty.String,
-	"_no_upper":     cty.Bool,
-	"_allow_repeat": cty.Bool,
-	"_from":         cty.String,
-	"_cost":         cty.Number,
-	"_variant":      cty.String,
-	"_memory":       cty.Number,
-	"_iterations":   cty.Number,
-	"_parallelism":  cty.Number,
-	"_encoding":     cty.String,
+	"_type":          cty.String,
+	"_strategy":      cty.String,
+	"_url":           cty.String,
+	"_query":         cty.String,
+	"_vault_path":    cty.String,
+	"_vault_key":     cty.String,
+	"_command":       cty.String,
+	"_length":        cty.Number,
+	"_digits":        cty.Number,
+	"_symbols":       cty.Number,
+	"_symbol_set":    cty.String,
+	"_no_upper":      cty.Bool,
+	"_allow_repeat":  cty.Bool,
+	"_from":          cty.String,
+	"_cost":          cty.Number,
+	"_variant":       cty.String,
+	"_memory":        cty.Number,
+	"_iterations":    cty.Number,
+	"_parallelism":   cty.Number,
+	"_encoding":      cty.String,
+	"_username":      cty.String,
+	"_username_from": cty.String,
 })
 
 // makeGenerateFunction creates the generate() function
@@ -170,26 +173,28 @@ func makeGenerateFunction() function.Function {
 		Type: function.StaticReturnType(valueMarkerType),
 		Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
 			result := map[string]cty.Value{
-				"_type":         cty.StringVal("generate"),
-				"_strategy":     cty.StringVal(""),
-				"_url":          cty.StringVal(""),
-				"_query":        cty.StringVal(""),
-				"_vault_path":   cty.StringVal(""),
-				"_vault_key":    cty.StringVal(""),
-				"_command":      cty.StringVal(""),
-				"_length":       cty.NumberIntVal(0),
-				"_digits":       cty.NumberIntVal(-1), // -1 means use default
-				"_symbols":      cty.NumberIntVal(-1),
-				"_symbol_set":   cty.StringVal(""),
-				"_no_upper":     cty.False,
-				"_allow_repeat": cty.True,
-				"_from":         cty.StringVal(""),
-				"_cost":         cty.NumberIntVal(0),
-				"_variant":      cty.StringVal(""),
-				"_memory":       cty.NumberIntVal(0),
-				"_iterations":   cty.NumberIntVal(0),
-				"_parallelism":  cty.NumberIntVal(0),
-				"_encoding":     cty.StringVal(""),
+				"_type":          cty.StringVal("generate"),
+				"_strategy":      cty.StringVal(""),
+				"_url":           cty.StringVal(""),
+				"_query":         cty.StringVal(""),
+				"_vault_path":    cty.StringVal(""),
+				"_vault_key":     cty.StringVal(""),
+				"_command":       cty.StringVal(""),
+				"_length":        cty.NumberIntVal(0),
+				"_digits":        cty.NumberIntVal(-1), // -1 means use default
+				"_symbols":       cty.NumberIntVal(-1),
+				"_symbol_set":    cty.StringVal(""),
+				"_no_upper":      cty.False,
+				"_allow_repeat":  cty.True,
+				"_from":          cty.StringVal(""),
+				"_cost":          cty.NumberIntVal(0),
+				"_variant":       cty.StringVal(""),
+				"_memory":        cty.NumberIntVal(0),
+				"_iterations":    cty.NumberIntVal(0),
+				"_parallelism":   cty.NumberIntVal(0),
+				"_encoding":      cty.StringVal(""),
+				"_username":      cty.StringVal(""),
+				"_username_from": cty.StringVal(""),
 			}
 
 			// Parse named arguments from varargs
@@ -249,26 +254,28 @@ func makeSourceFunction(sourceType string) function.Function {
 			}
 
 			return cty.ObjectVal(map[string]cty.Value{
-				"_type":         cty.StringVal(sourceType),
-				"_strategy":     cty.StringVal(strategy),
-				"_url":          cty.StringVal(url),
-				"_query":        cty.StringVal(query),
-				"_vault_path":   cty.StringVal(""),
-				"_vault_key":    cty.StringVal(""),
-				"_command":      cty.StringVal(""),
-				"_length":       cty.NumberIntVal(0),
-				"_digits":       cty.NumberIntVal(-1),
-				"_symbols":      cty.NumberIntVal(-1),
-				"_symbol_set":   cty.StringVal(""),
-				"_no_upper":     cty.False,
-				"_allow_repeat": cty.True,
-				"_from":         cty.StringVal(""),
-				"_cost":         cty.NumberIntVal(0),
-				"_variant":      cty.StringVal(""),
-				"_memory":       cty.NumberIntVal(0),
-				"_iterations":   cty.NumberIntVal(0),
-				"_parallelism":  cty.NumberIntVal(0),
-				"_encoding":     cty.StringVal(""),
+				"_type":          cty.StringVal(sourceType),
+				"_strategy":      cty.StringVal(strategy),
+				"_url":           cty.StringVal(url),
+				"_query":         cty.StringVal(query),
+				"_vault_path":    cty.StringVal(""),
+				"_vault_key":     cty.StringVal(""),
+				"_command":       cty.StringVal(""),
+				"_length":        cty.NumberIntVal(0),
+				"_digits":        cty.NumberIntVal(-1),
+				"_symbols":       cty.NumberIntVal(-1),
+				"_symbol_set":    cty.StringVal(""),
+				"_no_upper":      cty.False,
+				"_allow_repeat":  cty.True,
+				"_from":          cty.StringVal(""),
+				"_cost":          cty.NumberIntVal(0),
+				"_variant":       cty.StringVal(""),
+				"_memory":        cty.NumberIntVal(0),
+				"_iterations":    cty.NumberIntVal(0),
+				"_parallelism":   cty.NumberIntVal(0),
+				"_encoding":      cty.StringVal(""),
+				"_username":      cty.StringVal(""),
+				"_username_from": cty.StringVal(""),
 			}), nil
 		},
 	})
@@ -300,26 +307,28 @@ func makeRawFunction() function.Function {
 			}
 
 			return cty.ObjectVal(map[string]cty.Value{
-				"_type":         cty.StringVal("raw"),
-				"_strategy":     cty.StringVal(strategy),
-				"_url":          cty.StringVal(url),
-				"_query":        cty.StringVal(""),
-				"_vault_path":   cty.StringVal(""),
-				"_vault_key":    cty.StringVal(""),
-				"_command":      cty.StringVal(""),
-				"_length":       cty.NumberIntVal(0),
-				"_digits":       cty.NumberIntVal(-1),
-				"_symbols":      cty.NumberIntVal(-1),
-				"_symbol_set":   cty.StringVal(""),
-				"_no_upper":     cty.False,
-				"_allow_repeat": cty.True,
-				"_from":         cty.StringVal(""),
-				"_cost":         cty.NumberIntVal(0),
-				"_variant":      cty.StringVal(""),
-				"_memory":       cty.NumberIntVal(0),
-				"_iterations":   cty.NumberIntVal(0),
-				"_parallelism":  cty.NumberIntVal(0),
-				"_encoding":     cty.StringVal(""),
+				"_type":          cty.StringVal("raw"),
+				"_strategy":      cty.StringVal(strategy),
+				"_url":           cty.StringVal(url),
+				"_query":         cty.StringVal(""),
+				"_vault_path":    cty.StringVal(""),
+				"_vault_key":     cty.StringVal(""),
+				"_command":       cty.StringVal(""),
+				"_length":        cty.NumberIntVal(0),
+				"_digits":        cty.NumberIntVal(-1),
+				"_symbols":       cty.NumberIntVal(-1),
+				"_symbol_set":    cty.StringVal(""),
+				"_no_upper":      cty.False,
+				"_allow_repeat":  cty.True,
+				"_from":          cty.StringVal(""),
+				"_cost":          cty.NumberIntVal(0),
+				"_variant":       cty.StringVal(""),
+				"_memory":        cty.NumberIntVal(0),
+				"_iterations":    cty.NumberIntVal(0),
+				"_parallelism":   cty.NumberIntVal(0),
+				"_encoding":      cty.StringVal(""),
+				"_username":      cty.StringVal(""),
+				"_username_from": cty.StringVal(""),
 			}), nil
 		},
 	})
@@ -353,26 +362,28 @@ func makeVaultFunction() function.Function {
 			}
 
 			return cty.ObjectVal(map[string]cty.Value{
-				"_type":         cty.StringVal("vault"),
-				"_strategy":     cty.StringVal(strategy),
-				"_url":          cty.StringVal(""),
-				"_query":        cty.StringVal(""),
-				"_vault_path":   cty.StringVal(vaultPath),
-				"_vault_key":    cty.StringVal(vaultKey),
-				"_command":      cty.StringVal(""),
-				"_length":       cty.NumberIntVal(0),
-				"_digits":       cty.NumberIntVal(-1),
-				"_symbols":      cty.NumberIntVal(-1),
-				"_symbol_set":   cty.StringVal(""),
-				"_no_upper":     cty.False,
-				"_allow_repeat": cty.True,
-				"_from":         cty.StringVal(""),
-				"_cost":         cty.NumberIntVal(0),
-				"_variant":      cty.StringVal(""),
-				"_memory":       cty.NumberIntVal(0),
-				"_iterations":   cty.NumberIntVal(0),
-				"_parallelism":  cty.NumberIntVal(0),
-				"_encoding":     cty.StringVal(""),
+				"_type":          cty.StringVal("vault"),
+				"_strategy":      cty.StringVal(strategy),
+				"_url":           cty.StringVal(""),
+				"_query":         cty.StringVal(""),
+				"_vault_path":    cty.StringVal(vaultPath),
+				"_vault_key":     cty.StringVal(vaultKey),
+				"_command":       cty.StringVal(""),
+				"_length":        cty.NumberIntVal(0),
+				"_digits":        cty.NumberIntVal(-1),
+				"_symbols":       cty.NumberIntVal(-1),
+				"_symbol_set":    cty.StringVal(""),
+				"_no_upper":      cty.False,
+				"_allow_repeat":  cty.True,
+				"_from":          cty.StringVal(""),
+				"_cost":          cty.NumberIntVal(0),
+				"_variant":       cty.StringVal(""),
+				"_memory":        cty.NumberIntVal(0),
+				"_iterations":    cty.NumberIntVal(0),
+				"_parallelism":   cty.NumberIntVal(0),
+				"_encoding":      cty.StringVal(""),
+				"_username":      cty.StringVal(""),
+				"_username_from": cty.StringVal(""),
 			}), nil
 		},
 	})
@@ -404,26 +415,28 @@ func makeCommandFunction() function.Function {
 			}
 
 			return cty.ObjectVal(map[string]cty.Value{
-				"_type":         cty.StringVal("command"),
-				"_strategy":     cty.StringVal(strategy),
-				"_url":          cty.StringVal(""),
-				"_query":        cty.StringVal(""),
-				"_vault_path":   cty.StringVal(""),
-				"_vault_key":    cty.StringVal(""),
-				"_command":      cty.StringVal(cmd),
-				"_length":       cty.NumberIntVal(0),
-				"_digits":       cty.NumberIntVal(-1),
-				"_symbols":      cty.NumberIntVal(-1),
-				"_symbol_set":   cty.StringVal(""),
-				"_no_upper":     cty.False,
-				"_allow_repeat": cty.True,
-				"_from":         cty.StringVal(""),
-				"_cost":         cty.NumberIntVal(0),
-				"_variant":      cty.StringVal(""),
-				"_memory":       cty.NumberIntVal(0),
-				"_iterations":   cty.NumberIntVal(0),
-				"_parallelism":  cty.NumberIntVal(0),
-				"_encoding":     cty.StringVal(""),
+				"_type":          cty.StringVal("command"),
+				"_strategy":      cty.StringVal(strategy),
+				"_url":           cty.StringVal(""),
+				"_query":         cty.StringVal(""),
+				"_vault_path":    cty.StringVal(""),
+				"_vault_key":     cty.StringVal(""),
+				"_command":       cty.StringVal(cmd),
+				"_length":        cty.NumberIntVal(0),
+				"_digits":        cty.NumberIntVal(-1),
+				"_symbols":       cty.NumberIntVal(-1),
+				"_symbol_set":    cty.StringVal(""),
+				"_no_upper":      cty.False,
+				"_allow_repeat":  cty.True,
+				"_from":          cty.StringVal(""),
+				"_cost":          cty.NumberIntVal(0),
+				"_variant":       cty.StringVal(""),
+				"_memory":        cty.NumberIntVal(0),
+				"_iterations":    cty.NumberIntVal(0),
+				"_parallelism":   cty.NumberIntVal(0),
+				"_encoding":      cty.StringVal(""),
+				"_username":      cty.StringVal(""),
+				"_username_from": cty.StringVal(""),
 			}), nil
 		},
 	})
@@ -440,26 +453,28 @@ func makeBcryptFunction() function.Function {
 		Type: function.StaticReturnType(valueMarkerType),
 		Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
 			result := map[string]cty.Value{
-				"_type":         cty.StringVal("bcrypt"),
-				"_strategy":     cty.StringVal(""),
-				"_url":          cty.StringVal(""),
-				"_query":        cty.StringVal(""),
-				"_vault_path":   cty.StringVal(""),
-				"_vault_key":    cty.StringVal(""),
-				"_command":      cty.StringVal(""),
-				"_length":       cty.NumberIntVal(0),
-				"_digits":       cty.NumberIntVal(-1),
-				"_symbols":      cty.NumberIntVal(-1),
-				"_symbol_set":   cty.StringVal(""),
-				"_no_upper":     cty.False,
-				"_allow_repeat": cty.True,
-				"_from":         cty.StringVal(""),
-				"_cost":         cty.NumberIntVal(0),
-				"_variant":      cty.StringVal(""),
-				"_memory":       cty.NumberIntVal(0),
-				"_iterations":   cty.NumberIntVal(0),
-				"_parallelism":  cty.NumberIntVal(0),
-				"_encoding":     cty.StringVal(""),
+				"_type":          cty.StringVal("bcrypt"),
+				"_strategy":      cty.StringVal(""),
+				"_url":           cty.StringVal(""),
+				"_query":         cty.StringVal(""),
+				"_vault_path":    cty.StringVal(""),
+				"_vault_key":     cty.StringVal(""),
+				"_command":       cty.StringVal(""),
+				"_length":        cty.NumberIntVal(0),
+				"_digits":        cty.NumberIntVal(-1),
+				"_symbols":       cty.NumberIntVal(-1),
+				"_symbol_set":    cty.StringVal(""),
+				"_no_upper":      cty.False,
+				"_allow_repeat":  cty.True,
+				"_from":          cty.StringVal(""),
+				"_cost":          cty.NumberIntVal(0),
+				"_variant":       cty.StringVal(""),
+				"_memory":        cty.NumberIntVal(0),
+				"_iterations":    cty.NumberIntVal(0),
+				"_parallelism":   cty.NumberIntVal(0),
+				"_encoding":      cty.StringVal(""),
+				"_username":      cty.StringVal(""),
+				"_username_from": cty.StringVal(""),
 			}
 
 			// Parse options from varargs
@@ -499,26 +514,28 @@ func makeArgon2Function() function.Function {
 		Type: function.StaticReturnType(valueMarkerType),
 		Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
 			result := map[string]cty.Value{
-				"_type":         cty.StringVal("argon2"),
-				"_strategy":     cty.StringVal(""),
-				"_url":          cty.StringVal(""),
-				"_query":        cty.StringVal(""),
-				"_vault_path":   cty.StringVal(""),
-				"_vault_key":    cty.StringVal(""),
-				"_command":      cty.StringVal(""),
-				"_length":       cty.NumberIntVal(0),
-				"_digits":       cty.NumberIntVal(-1),
-				"_symbols":      cty.NumberIntVal(-1),
-				"_symbol_set":   cty.StringVal(""),
-				"_no_upper":     cty.False,
-				"_allow_repeat": cty.True,
-				"_from":         cty.StringVal(""),
-				"_cost":         cty.NumberIntVal(0),
-				"_variant":      cty.StringVal(""),
-				"_memory":       cty.NumberIntVal(0),
-				"_iterations":   cty.NumberIntVal(0),
-				"_parallelism":  cty.NumberIntVal(0),
-				"_encoding":     cty.StringVal(""),
+				"_type":          cty.StringVal("argon2"),
+				"_strategy":      cty.StringVal(""),
+				"_url":           cty.StringVal(""),
+				"_query":         cty.StringVal(""),
+				"_vault_path":    cty.StringVal(""),
+				"_vault_key":     cty.StringVal(""),
+				"_command":       cty.StringVal(""),
+				"_length":        cty.NumberIntVal(0),
+				"_digits":        cty.NumberIntVal(-1),
+				"_symbols":       cty.NumberIntVal(-1),
+				"_symbol_set":    cty.StringVal(""),
+				"_no_upper":      cty.False,
+				"_allow_repeat":  cty.True,
+				"_from":          cty.StringVal(""),
+				"_cost":          cty.NumberIntVal(0),
+				"_variant":       cty.StringVal(""),
+				"_memory":        cty.NumberIntVal(0),
+				"_iterations":    cty.NumberIntVal(0),
+				"_parallelism":   cty.NumberIntVal(0),
+				"_encoding":      cty.StringVal(""),
+				"_username":      cty.StringVal(""),
+				"_username_from": cty.StringVal(""),
 			}
 
 			// Parse options from varargs
@@ -564,26 +581,28 @@ func makePbkdf2Function() function.Function {
 		Type: function.StaticReturnType(valueMarkerType),
 		Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
 			result := map[string]cty.Value{
-				"_type":         cty.StringVal("pbkdf2"),
-				"_strategy":     cty.StringVal(""),
-				"_url":          cty.StringVal(""),
-				"_query":        cty.StringVal(""),
-				"_vault_path":   cty.StringVal(""),
-				"_vault_key":    cty.StringVal(""),
-				"_command":      cty.StringVal(""),
-				"_length":       cty.NumberIntVal(0),
-				"_digits":       cty.NumberIntVal(-1),
-				"_symbols":      cty.NumberIntVal(-1),
-				"_symbol_set":   cty.StringVal(""),
-				"_no_upper":     cty.False,
-				"_allow_repeat": cty.True,
-				"_from":         cty.StringVal(""),
-				"_cost":         cty.NumberIntVal(0),
-				"_variant":      cty.StringVal(""),
-				"_memory":       cty.NumberIntVal(0),
-				"_iterations":   cty.NumberIntVal(0),
-				"_parallelism":  cty.NumberIntVal(0),
-				"_encoding":     cty.StringVal(""),
+				"_type":          cty.StringVal("pbkdf2"),
+				"_strategy":      cty.StringVal(""),
+				"_url":           cty.StringVal(""),
+				"_query":         cty.StringVal(""),
+				"_vault_path":    cty.StringVal(""),
+				"_vault_key":     cty.StringVal(""),
+				"_command":       cty.StringVal(""),
+				"_length":        cty.NumberIntVal(0),
+				"_digits":        cty.NumberIntVal(-1),
+				"_symbols":       cty.NumberIntVal(-1),
+				"_symbol_set":    cty.StringVal(""),
+				"_no_upper":      cty.False,
+				"_allow_repeat":  cty.True,
+				"_from":          cty.StringVal(""),
+				"_cost":          cty.NumberIntVal(0),
+				"_variant":       cty.StringVal(""),
+				"_memory":        cty.NumberIntVal(0),
+				"_iterations":    cty.NumberIntVal(0),
+				"_parallelism":   cty.NumberIntVal(0),
+				"_encoding":      cty.StringVal(""),
+				"_username":      cty.StringVal(""),
+				"_username_from": cty.StringVal(""),
 			}
 
 			// Parse options from varargs
@@ -609,6 +628,79 @@ func makePbkdf2Function() function.Function {
 			// Validate required 'from' parameter
 			if result["_from"].AsString() == "" {
 				return cty.NilVal, fmt.Errorf("pbkdf2() requires 'from' parameter")
+			}
+
+			return cty.ObjectVal(result), nil
+		},
+	})
+}
+
+// makeSha1HtpasswdFunction creates the sha1_htpasswd() function for htpasswd {SHA} format
+func makeSha1HtpasswdFunction() function.Function {
+	return function.New(&function.Spec{
+		Params: []function.Parameter{},
+		VarParam: &function.Parameter{
+			Name: "options",
+			Type: cty.DynamicPseudoType,
+		},
+		Type: function.StaticReturnType(valueMarkerType),
+		Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+			result := map[string]cty.Value{
+				"_type":          cty.StringVal("sha1_htpasswd"),
+				"_strategy":      cty.StringVal(""),
+				"_url":           cty.StringVal(""),
+				"_query":         cty.StringVal(""),
+				"_vault_path":    cty.StringVal(""),
+				"_vault_key":     cty.StringVal(""),
+				"_command":       cty.StringVal(""),
+				"_length":        cty.NumberIntVal(0),
+				"_digits":        cty.NumberIntVal(-1),
+				"_symbols":       cty.NumberIntVal(-1),
+				"_symbol_set":    cty.StringVal(""),
+				"_no_upper":      cty.False,
+				"_allow_repeat":  cty.True,
+				"_from":          cty.StringVal(""),
+				"_cost":          cty.NumberIntVal(0),
+				"_variant":       cty.StringVal(""),
+				"_memory":        cty.NumberIntVal(0),
+				"_iterations":    cty.NumberIntVal(0),
+				"_parallelism":   cty.NumberIntVal(0),
+				"_encoding":      cty.StringVal(""),
+				"_username":      cty.StringVal(""),
+				"_username_from": cty.StringVal(""),
+			}
+
+			// Parse options from varargs
+			for _, arg := range args {
+				if arg.Type().IsObjectType() {
+					for k, v := range arg.AsValueMap() {
+						switch k {
+						case "from":
+							result["_from"] = v
+						case "username":
+							result["_username"] = v
+						case "username_from":
+							result["_username_from"] = v
+						case "strategy":
+							result["_strategy"] = v
+						}
+					}
+				}
+			}
+
+			// Validate required 'from' parameter
+			if result["_from"].AsString() == "" {
+				return cty.NilVal, fmt.Errorf("sha1_htpasswd() requires 'from' parameter")
+			}
+
+			// Validate username: exactly one of username or username_from must be set
+			hasUsername := result["_username"].AsString() != ""
+			hasUsernameFrom := result["_username_from"].AsString() != ""
+			if hasUsername && hasUsernameFrom {
+				return cty.NilVal, fmt.Errorf("sha1_htpasswd() cannot have both 'username' and 'username_from'")
+			}
+			if !hasUsername && !hasUsernameFrom {
+				return cty.NilVal, fmt.Errorf("sha1_htpasswd() requires either 'username' or 'username_from' parameter")
 			}
 
 			return cty.ObjectVal(result), nil
@@ -1117,6 +1209,14 @@ func ctyValueToValue(val cty.Value) (Value, error) {
 				Encoding:   valMap["_encoding"].AsString(),
 			}
 
+		case "sha1_htpasswd":
+			v.Type = ValueTypeSha1Htpasswd
+			v.Sha1Htpasswd = &Sha1HtpasswdConfig{
+				FromKey:         valMap["_from"].AsString(),
+				Username:        valMap["_username"].AsString(),
+				UsernameFromKey: valMap["_username_from"].AsString(),
+			}
+
 		default:
 			return Value{}, fmt.Errorf("unknown value type: %s", typeStr)
 		}
@@ -1189,6 +1289,16 @@ func detectHashCycles(name string, content map[string]Value) error {
 		case ValueTypePbkdf2:
 			if val.Pbkdf2 != nil {
 				fromKey = val.Pbkdf2.FromKey
+			}
+		case ValueTypeSha1Htpasswd:
+			if val.Sha1Htpasswd != nil {
+				fromKey = val.Sha1Htpasswd.FromKey
+				// Also validate username_from reference
+				if val.Sha1Htpasswd.UsernameFromKey != "" {
+					if _, exists := content[val.Sha1Htpasswd.UsernameFromKey]; !exists {
+						return fmt.Errorf("secret %q: key %q references non-existent key %q via username_from", name, key, val.Sha1Htpasswd.UsernameFromKey)
+					}
+				}
 			}
 		}
 		if fromKey != "" {

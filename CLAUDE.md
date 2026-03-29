@@ -139,6 +139,7 @@ One secret block = one Vault path = multiple key-value pairs inside.
 | Raw | `key = raw(url)` | `ssh_key = raw("s3://bucket/key.pem")` |
 | Vault | `key = vault(path, key)` | `shared = vault("secret/shared", "api_key")` |
 | Command | `key = command(cmd)` | `hash = command("caddy hash-password ...")` |
+| SHA1 htpasswd | `key = sha1_htpasswd({from, username})` | `htpasswd = sha1_htpasswd({from = "password", username = "admin"})` |
 
 All functions support optional `strategy` parameter via object literal:
 
@@ -214,6 +215,7 @@ ENV=prod vsg apply --var ENV=dev   # uses "dev"
 | `static` | `update` | Update if changed |
 | `command` | `update` | Re-run and update |
 | `vault` | `update` | Keep in sync with source |
+| `sha1_htpasswd` | `update` | Keep in sync with source key |
 
 Per-key override via `strategy` parameter in any function.
 
@@ -405,6 +407,7 @@ Helm chart available at `helm/vault-secrets-generator/`. Typically deployed as a
 - [x] **v2.1.0 Config-based delete**: delete command with `--config`, `--target`, `--all`, `--exclude`
 
 - [x] **v2.2.0 Password hashing functions**: `bcrypt()`, `argon2()`, `pbkdf2()` with referential values
+- [x] **v2.3.0 SHA1 htpasswd function**: `sha1_htpasswd()` with `username`/`username_from` support
 
 ### Planned
 - [ ] GCS fetcher
@@ -436,6 +439,13 @@ secret "authelia" {
     # bcrypt example
     api_key = generate()
     api_key_hash = bcrypt({from = "api_key", cost = 12})
+
+    # SHA1 htpasswd example
+    push_user     = "promtail"
+    push_password = generate({length = 32, symbols = 0})
+    htpasswd      = sha1_htpasswd({from = "push_password", username = "promtail"})
+    # Or reference username from another key:
+    htpasswd_ref  = sha1_htpasswd({from = "push_password", username_from = "push_user"})
   }
 }
 ```
@@ -447,6 +457,7 @@ secret "authelia" {
 | `bcrypt({from, cost})` | `$2a$cost$salt...hash` | Most web frameworks (Rails, Django, Node.js) |
 | `argon2({from, variant, memory, iterations, parallelism})` | `$argon2id$v=19$m=65536,t=3,p=4$salt$hash` | Authelia, Bitwarden, modern apps |
 | `pbkdf2({from, variant, iterations, encoding})` | `$pbkdf2-sha512$iterations$salt$hash` | Enterprise/FIPS compliance, Authelia OIDC |
+| `sha1_htpasswd({from, username/username_from})` | `username:{SHA}base64hash` | htpasswd basic auth (kgateway, Apache, nginx) |
 
 ### Default Parameters
 
@@ -460,6 +471,15 @@ secret "authelia" {
 | pbkdf2 | variant | sha512 |
 | pbkdf2 | iterations | 310000 |
 | pbkdf2 | encoding | phc |
+| sha1_htpasswd | (none) | No tunable parameters |
+
+### SHA1 Htpasswd Options
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `from` | Yes | Key name to hash |
+| `username` | One of | Static username string (mutually exclusive with `username_from`) |
+| `username_from` | these | Key name to read username from (mutually exclusive with `username`) |
 
 ### Strategy Behavior
 

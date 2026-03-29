@@ -50,17 +50,18 @@ type ValueSource string
 
 // ValueSource constants indicate where a value originated from.
 const (
-	SourceStatic    ValueSource = "static"
-	SourceGenerated ValueSource = "generated"
-	SourceJSON      ValueSource = "json"
-	SourceYAML      ValueSource = "yaml"
-	SourceRaw       ValueSource = "raw"
-	SourceVault     ValueSource = "vault"
-	SourceCommand   ValueSource = "command"
-	SourceExisting  ValueSource = "existing"
-	SourceBcrypt    ValueSource = "bcrypt"
-	SourceArgon2    ValueSource = "argon2"
-	SourcePbkdf2    ValueSource = "pbkdf2"
+	SourceStatic       ValueSource = "static"
+	SourceGenerated    ValueSource = "generated"
+	SourceJSON         ValueSource = "json"
+	SourceYAML         ValueSource = "yaml"
+	SourceRaw          ValueSource = "raw"
+	SourceVault        ValueSource = "vault"
+	SourceCommand      ValueSource = "command"
+	SourceExisting     ValueSource = "existing"
+	SourceBcrypt       ValueSource = "bcrypt"
+	SourceArgon2       ValueSource = "argon2"
+	SourcePbkdf2       ValueSource = "pbkdf2"
+	SourceSha1Htpasswd ValueSource = "sha1_htpasswd" // #nosec G101 -- not a credential
 )
 
 // Resolve resolves a single value based on its type.
@@ -123,6 +124,8 @@ func (r *Resolver) getDefaultStrategy(valueType config.ValueType) config.Strateg
 		return r.strategies.Argon2
 	case config.ValueTypePbkdf2:
 		return r.strategies.Pbkdf2
+	case config.ValueTypeSha1Htpasswd:
+		return r.strategies.Sha1Htpasswd
 	default:
 		return config.StrategyUpdate
 	}
@@ -348,7 +351,7 @@ func (r *Resolver) resolveCommand(ctx context.Context, val config.Value, existin
 	}, nil
 }
 
-// ResolveHash resolves a hash value (bcrypt, argon2, pbkdf2).
+// ResolveHash resolves a hash value (bcrypt, argon2, pbkdf2, sha1_htpasswd).
 // sourceValue is the password to hash (from resolvedValues map).
 // existingValue is the current hash in Vault (if any).
 // force forces regeneration of the hash.
@@ -366,6 +369,8 @@ func (r *Resolver) ResolveHash(val config.Value, sourceValue, existingValue stri
 		return r.resolveArgon2(val, sourceValue, existingValue, force, strategy)
 	case config.ValueTypePbkdf2:
 		return r.resolvePbkdf2(val, sourceValue, existingValue, force, strategy)
+	case config.ValueTypeSha1Htpasswd:
+		return r.resolveSha1Htpasswd(val, sourceValue, existingValue, force, strategy)
 	default:
 		return nil, fmt.Errorf("ResolveHash called with non-hash type: %s", val.Type)
 	}
@@ -566,9 +571,73 @@ func (r *Resolver) resolvePbkdf2(val config.Value, sourceValue, existingValue st
 	}, nil
 }
 
+// resolveSha1Htpasswd generates a SHA1 htpasswd entry from the source value.
+func (r *Resolver) resolveSha1Htpasswd(val config.Value, sourceValue, existingValue string, force bool, strategy config.Strategy) (*ResolveResult, error) {
+	username := val.Sha1Htpasswd.Username
+
+	// --force overrides everything: regenerate hash
+	if force {
+		hash, err := generator.HashSha1Htpasswd(sourceValue, username)
+		if err != nil {
+			return nil, fmt.Errorf("generating sha1_htpasswd hash: %w", err)
+		}
+		return &ResolveResult{
+			Value:    hash,
+			Source:   SourceSha1Htpasswd,
+			Strategy: strategy,
+		}, nil
+	}
+
+	// If hash doesn't exist, create it (both strategies)
+	if existingValue == "" {
+		hash, err := generator.HashSha1Htpasswd(sourceValue, username)
+		if err != nil {
+			return nil, fmt.Errorf("generating sha1_htpasswd hash: %w", err)
+		}
+		return &ResolveResult{
+			Value:    hash,
+			Source:   SourceSha1Htpasswd,
+			Strategy: strategy,
+		}, nil
+	}
+
+	// Hash exists - check if it verifies against current source
+	verifies := generator.VerifySha1Htpasswd(existingValue, sourceValue, username)
+
+	if strategy == config.StrategyCreate {
+		return &ResolveResult{
+			Value:     existingValue,
+			Source:    SourceExisting,
+			Strategy:  strategy,
+			StaleHash: !verifies,
+			FromKey:   val.Sha1Htpasswd.FromKey,
+		}, nil
+	}
+
+	// strategy == StrategyUpdate
+	if verifies {
+		return &ResolveResult{
+			Value:    existingValue,
+			Source:   SourceExisting,
+			Strategy: strategy,
+		}, nil
+	}
+
+	// Hash is stale, regenerate
+	hash, err := generator.HashSha1Htpasswd(sourceValue, username)
+	if err != nil {
+		return nil, fmt.Errorf("generating sha1_htpasswd hash: %w", err)
+	}
+	return &ResolveResult{
+		Value:    hash,
+		Source:   SourceSha1Htpasswd,
+		Strategy: strategy,
+	}, nil
+}
+
 // IsHashType returns true if the value type is a hash function.
 func IsHashType(t config.ValueType) bool {
-	return t == config.ValueTypeBcrypt || t == config.ValueTypeArgon2 || t == config.ValueTypePbkdf2
+	return t == config.ValueTypeBcrypt || t == config.ValueTypeArgon2 || t == config.ValueTypePbkdf2 || t == config.ValueTypeSha1Htpasswd
 }
 
 // GetHashFromKey returns the from_key for a hash value type.
@@ -585,6 +654,10 @@ func GetHashFromKey(val config.Value) string {
 	case config.ValueTypePbkdf2:
 		if val.Pbkdf2 != nil {
 			return val.Pbkdf2.FromKey
+		}
+	case config.ValueTypeSha1Htpasswd:
+		if val.Sha1Htpasswd != nil {
+			return val.Sha1Htpasswd.FromKey
 		}
 	}
 	return ""

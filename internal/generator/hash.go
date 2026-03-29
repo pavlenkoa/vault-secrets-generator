@@ -2,6 +2,7 @@ package generator
 
 import (
 	"crypto/rand"
+	"crypto/sha1" // #nosec G505 -- SHA1 required for htpasswd {SHA} format compatibility
 	"crypto/sha256"
 	"crypto/sha512"
 	"crypto/subtle"
@@ -342,4 +343,27 @@ func parsePbkdf2Hash(hash string) (variant string, iterations int, salt, key []b
 	}
 
 	return
+}
+
+// HashSha1Htpasswd generates an htpasswd entry in {SHA} format: username:{SHA}base64(sha1(password)).
+func HashSha1Htpasswd(password, username string) (string, error) {
+	if username == "" {
+		return "", fmt.Errorf("sha1_htpasswd requires a non-empty username")
+	}
+	if strings.Contains(username, ":") {
+		return "", fmt.Errorf("sha1_htpasswd username must not contain ':'")
+	}
+	h := sha1.Sum([]byte(password)) // #nosec G401 -- SHA1 required for htpasswd {SHA} format compatibility
+	encoded := base64.StdEncoding.EncodeToString(h[:])
+	return fmt.Sprintf("%s:{SHA}%s", username, encoded), nil
+}
+
+// VerifySha1Htpasswd verifies that a {SHA} htpasswd entry matches the given password and username.
+// Since SHA1 htpasswd is deterministic (no salt), verification is a simple string comparison.
+func VerifySha1Htpasswd(hash, password, username string) bool {
+	expected, err := HashSha1Htpasswd(password, username)
+	if err != nil {
+		return false
+	}
+	return hash == expected
 }

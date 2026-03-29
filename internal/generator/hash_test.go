@@ -472,3 +472,67 @@ func TestParsePbkdf2Hash(t *testing.T) {
 		}
 	})
 }
+
+func TestHashSha1Htpasswd(t *testing.T) {
+	t.Run("known test vector", func(t *testing.T) {
+		// SHA1("password") = W6ph5Mm5Pz8GgiULbPgzG37mj9g= in standard base64
+		hash, err := HashSha1Htpasswd("password", "testuser")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		expected := "testuser:{SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g="
+		if hash != expected {
+			t.Errorf("expected %q, got %q", expected, hash)
+		}
+	})
+
+	t.Run("deterministic output", func(t *testing.T) {
+		hash1, _ := HashSha1Htpasswd("mypassword", "admin")
+		hash2, _ := HashSha1Htpasswd("mypassword", "admin")
+		if hash1 != hash2 {
+			t.Errorf("expected identical hashes for same input, got %q and %q", hash1, hash2)
+		}
+	})
+
+	t.Run("empty username returns error", func(t *testing.T) {
+		_, err := HashSha1Htpasswd("password", "")
+		if err == nil {
+			t.Error("expected error for empty username")
+		}
+	})
+
+	t.Run("username with colon returns error", func(t *testing.T) {
+		_, err := HashSha1Htpasswd("password", "user:name")
+		if err == nil {
+			t.Error("expected error for username containing colon")
+		}
+	})
+}
+
+func TestVerifySha1Htpasswd(t *testing.T) {
+	hash, _ := HashSha1Htpasswd("password", "testuser")
+
+	t.Run("correct password verifies", func(t *testing.T) {
+		if !VerifySha1Htpasswd(hash, "password", "testuser") {
+			t.Error("expected verification to succeed")
+		}
+	})
+
+	t.Run("wrong password fails", func(t *testing.T) {
+		if VerifySha1Htpasswd(hash, "wrongpassword", "testuser") {
+			t.Error("expected verification to fail")
+		}
+	})
+
+	t.Run("changed username fails", func(t *testing.T) {
+		if VerifySha1Htpasswd(hash, "password", "otheruser") {
+			t.Error("expected verification to fail with different username")
+		}
+	})
+
+	t.Run("empty username fails", func(t *testing.T) {
+		if VerifySha1Htpasswd(hash, "password", "") {
+			t.Error("expected verification to fail with empty username")
+		}
+	})
+}

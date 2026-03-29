@@ -248,6 +248,17 @@ func (e *Engine) processBlock(ctx context.Context, name string, block config.Sec
 				errors = append(errors, BlockError{Block: name, Key: key, Err: fmt.Errorf("hash source key %q not found", fromKey)})
 				continue
 			}
+
+			// Resolve username_from for sha1_htpasswd
+			if value.Type == config.ValueTypeSha1Htpasswd && value.Sha1Htpasswd != nil && value.Sha1Htpasswd.UsernameFromKey != "" {
+				usernameVal, uOk := resolvedValues[value.Sha1Htpasswd.UsernameFromKey]
+				if !uOk {
+					errors = append(errors, BlockError{Block: name, Key: key, Err: fmt.Errorf("sha1_htpasswd username_from key %q not found", value.Sha1Htpasswd.UsernameFromKey)})
+					continue
+				}
+				value.Sha1Htpasswd.Username = usernameVal
+			}
+
 			resolved, err = e.resolver.ResolveHash(value, sourceValue, existingValue, opts.Force)
 		} else {
 			resolved, err = e.resolver.Resolve(ctx, value, existingValue, opts.Force)

@@ -57,31 +57,33 @@ type AuthConfig struct {
 
 // StrategyDefaults defines default strategies per value type.
 type StrategyDefaults struct {
-	Generate Strategy
-	JSON     Strategy
-	YAML     Strategy
-	Raw      Strategy
-	Static   Strategy
-	Command  Strategy
-	Vault    Strategy
-	Bcrypt   Strategy
-	Argon2   Strategy
-	Pbkdf2   Strategy
+	Generate     Strategy
+	JSON         Strategy
+	YAML         Strategy
+	Raw          Strategy
+	Static       Strategy
+	Command      Strategy
+	Vault        Strategy
+	Bcrypt       Strategy
+	Argon2       Strategy
+	Pbkdf2       Strategy
+	Sha1Htpasswd Strategy
 }
 
 // DefaultStrategyDefaults returns the default strategy configuration.
 func DefaultStrategyDefaults() StrategyDefaults {
 	return StrategyDefaults{
-		Generate: StrategyCreate, // Don't regenerate existing passwords
-		JSON:     StrategyUpdate, // Keep in sync with source
-		YAML:     StrategyUpdate, // Keep in sync with source
-		Raw:      StrategyUpdate, // Keep in sync with source
-		Static:   StrategyUpdate, // Update if changed
-		Command:  StrategyUpdate, // Re-run and update
-		Vault:    StrategyUpdate, // Keep in sync with source
-		Bcrypt:   StrategyUpdate, // Keep in sync with source key
-		Argon2:   StrategyUpdate, // Keep in sync with source key
-		Pbkdf2:   StrategyUpdate, // Keep in sync with source key
+		Generate:     StrategyCreate, // Don't regenerate existing passwords
+		JSON:         StrategyUpdate, // Keep in sync with source
+		YAML:         StrategyUpdate, // Keep in sync with source
+		Raw:          StrategyUpdate, // Keep in sync with source
+		Static:       StrategyUpdate, // Update if changed
+		Command:      StrategyUpdate, // Re-run and update
+		Vault:        StrategyUpdate, // Keep in sync with source
+		Bcrypt:       StrategyUpdate, // Keep in sync with source key
+		Argon2:       StrategyUpdate, // Keep in sync with source key
+		Pbkdf2:       StrategyUpdate, // Keep in sync with source key
+		Sha1Htpasswd: StrategyUpdate, // Keep in sync with source key
 	}
 }
 
@@ -178,6 +180,20 @@ type Pbkdf2Config struct {
 	Encoding string
 }
 
+// Sha1HtpasswdConfig defines SHA1 htpasswd hashing parameters.
+type Sha1HtpasswdConfig struct {
+	// FromKey is the key name to hash (must exist in same secret block)
+	FromKey string
+
+	// Username is the static username for the htpasswd entry
+	// Mutually exclusive with UsernameFromKey
+	Username string
+
+	// UsernameFromKey references another key in the same secret block for the username
+	// Mutually exclusive with Username
+	UsernameFromKey string
+}
+
 // SecretBlock represents a group of secrets at a Vault path.
 type SecretBlock struct {
 	// Name is the block label/identifier (for display and lookup)
@@ -225,16 +241,17 @@ type ValueType string
 
 // ValueType constants define the supported value types.
 const (
-	ValueTypeStatic   ValueType = "static"
-	ValueTypeGenerate ValueType = "generate"
-	ValueTypeJSON     ValueType = "json"
-	ValueTypeYAML     ValueType = "yaml"
-	ValueTypeRaw      ValueType = "raw"
-	ValueTypeVault    ValueType = "vault"
-	ValueTypeCommand  ValueType = "command"
-	ValueTypeBcrypt   ValueType = "bcrypt"
-	ValueTypeArgon2   ValueType = "argon2"
-	ValueTypePbkdf2   ValueType = "pbkdf2"
+	ValueTypeStatic       ValueType = "static"
+	ValueTypeGenerate     ValueType = "generate"
+	ValueTypeJSON         ValueType = "json"
+	ValueTypeYAML         ValueType = "yaml"
+	ValueTypeRaw          ValueType = "raw"
+	ValueTypeVault        ValueType = "vault"
+	ValueTypeCommand      ValueType = "command"
+	ValueTypeBcrypt       ValueType = "bcrypt"
+	ValueTypeArgon2       ValueType = "argon2"
+	ValueTypePbkdf2       ValueType = "pbkdf2"
+	ValueTypeSha1Htpasswd ValueType = "sha1_htpasswd" // #nosec G101 -- not a credential
 )
 
 // Value represents a secret value which can be static, generated, fetched, or from a command.
@@ -274,4 +291,7 @@ type Value struct {
 
 	// Pbkdf2 holds the PBKDF2 hashing configuration
 	Pbkdf2 *Pbkdf2Config
+
+	// Sha1Htpasswd holds the SHA1 htpasswd hashing configuration
+	Sha1Htpasswd *Sha1HtpasswdConfig
 }
